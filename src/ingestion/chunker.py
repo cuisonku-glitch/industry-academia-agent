@@ -13,8 +13,8 @@ except ImportError:
     from pdf_parser import parse_papers
 
 
-DEFAULT_CHUNK_SIZE = 800
-DEFAULT_OVERLAP = 150
+DEFAULT_CHUNK_SIZE = 500
+DEFAULT_OVERLAP = 100
 
 # Dataset v0.1 metadata, checked against the title pages of the three PDFs.
 PAPER_METADATA: dict[str, dict[str, Any]] = {

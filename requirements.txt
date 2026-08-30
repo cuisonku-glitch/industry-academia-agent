@@ -1,2 +1,5 @@
 # PDF parsing
 PyMuPDF==1.28.2
+
+# Local text embeddings
+sentence-transformers==6.0.0

@@ -22,5 +22,8 @@ Thumbs.db
 data/raw/
 data/vector_db/
 
+# Downloaded local AI models
+.cache/
+
 # Logs
 *.log
