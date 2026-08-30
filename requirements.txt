@@ -6,3 +6,7 @@ sentence-transformers==6.0.0
 
 # Local vector database
 chromadb==1.5.9
+
+# Kimi API and environment configuration
+openai==3.6.0
+python-dotenv==1.2.3
