@@ -37,3 +37,8 @@ The demo embeds the question locally on the GPU, retrieves the top five ChromaDB
 chunks, sends only those chunks to Kimi, and prints a grounded answer followed by
 deterministic paper and page references. Kimi thinking mode is disabled for this
 short evidence-based task so the output-token budget is reserved for the answer.
+
+On Windows, ChromaDB is stored at
+`C:\Users\<username>\.industry-academia-agent\vector_db`. This user-home location
+avoids Chinese-path limitations and Microsoft Store per-app `LOCALAPPDATA`
+virtualization. The project `data\vector_db` entry may be a Junction to that path.

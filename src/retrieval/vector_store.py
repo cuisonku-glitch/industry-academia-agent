@@ -25,8 +25,8 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "vector_db"
 WINDOWS_DB_ALIAS = (
-    Path(os.environ["LOCALAPPDATA"]) / "industry-academia-agent" / "vector_db"
-    if os.name == "nt" and "LOCALAPPDATA" in os.environ
+    Path.home() / ".industry-academia-agent" / "vector_db"
+    if os.name == "nt"
     else DEFAULT_DB_PATH
 )
 DEFAULT_COLLECTION_NAME = "paper_chunks"
@@ -46,8 +46,8 @@ class PaperVectorStore:
         self.access_directory = WINDOWS_DB_ALIAS if uses_windows_alias else persist_directory
         # On Windows, DEFAULT_DB_PATH may already be a Junction. Calling mkdir on
         # that existing reparse point can raise WinError 183 in a normal shell.
-        # Chroma uses the ASCII-only target directly, so only that real directory
-        # needs to be created here.
+        # A user-home path also avoids per-app LOCALAPPDATA virtualization when
+        # Python is launched from Microsoft Store builds of PowerShell or Codex.
         self.access_directory.mkdir(parents=True, exist_ok=True)
         self.client = chromadb.PersistentClient(
             path=self.access_directory,
