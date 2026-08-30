@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
+import torch
 from sentence_transformers import SentenceTransformer
 
 try:
@@ -22,6 +23,7 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MODEL_NAME = "BAAI/bge-small-zh-v1.5"
 DEFAULT_MODEL_CACHE = PROJECT_ROOT / ".cache" / "huggingface"
+BGE_QUERY_INSTRUCTION = "为这个句子生成表示以用于检索相关文章："
 
 
 class LocalEmbedder:
@@ -31,15 +33,16 @@ class LocalEmbedder:
         self,
         model_name: str = DEFAULT_MODEL_NAME,
         cache_folder: Path = DEFAULT_MODEL_CACHE,
-        device: str = "cpu",
+        device: str | None = None,
     ) -> None:
         self.model_name = model_name
         self.cache_folder = cache_folder
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.cache_folder.mkdir(parents=True, exist_ok=True)
         self.model = SentenceTransformer(
             model_name,
             cache_folder=str(cache_folder),
-            device=device,
+            device=self.device,
         )
 
     @property
@@ -79,6 +82,13 @@ class LocalEmbedder:
             normalize_embeddings=True,
         )
         return vectors.tolist()
+
+    def embed_queries(self, queries: Sequence[str]) -> list[list[float]]:
+        """Embed retrieval queries with the instruction expected by Chinese BGE."""
+        if any(not query.strip() for query in queries):
+            raise ValueError("检索问题不能为空")
+        instructed_queries = [f"{BGE_QUERY_INSTRUCTION}{query}" for query in queries]
+        return self.embed_documents(instructed_queries)
 
 
 def cosine_similarity(vector_a: Sequence[float], vector_b: Sequence[float]) -> float:
@@ -121,6 +131,7 @@ def main() -> None:
     print(f"模型缓存：{DEFAULT_MODEL_CACHE}")
     print("正在加载本地模型（首次运行会自动下载），请稍候……")
     embedder = LocalEmbedder()
+    print(f"推理设备：{embedder.device}")
     embeddings = embedder.embed_documents(texts)
 
     print(f"\n输入文本数量：{len(texts)}")

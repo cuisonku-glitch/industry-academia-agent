@@ -3,3 +3,6 @@ PyMuPDF==1.28.2
 
 # Local text embeddings
 sentence-transformers==6.0.0
+
+# Local vector database
+chromadb==1.5.9
