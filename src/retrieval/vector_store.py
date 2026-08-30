@@ -42,13 +42,13 @@ class PaperVectorStore:
         collection_name: str = DEFAULT_COLLECTION_NAME,
     ) -> None:
         self.persist_directory = persist_directory
-        self.persist_directory.mkdir(parents=True, exist_ok=True)
-        uses_windows_alias = (
-            persist_directory == DEFAULT_DB_PATH
-            and WINDOWS_DB_ALIAS.exists()
-            and persist_directory.resolve() == WINDOWS_DB_ALIAS.resolve()
-        )
+        uses_windows_alias = os.name == "nt" and persist_directory == DEFAULT_DB_PATH
         self.access_directory = WINDOWS_DB_ALIAS if uses_windows_alias else persist_directory
+        # On Windows, DEFAULT_DB_PATH may already be a Junction. Calling mkdir on
+        # that existing reparse point can raise WinError 183 in a normal shell.
+        # Chroma uses the ASCII-only target directly, so only that real directory
+        # needs to be created here.
+        self.access_directory.mkdir(parents=True, exist_ok=True)
         self.client = chromadb.PersistentClient(
             path=self.access_directory,
             settings=Settings(anonymized_telemetry=False),
