@@ -1,1 +1,2 @@
-# Project dependencies will be added incrementally.
+# PDF parsing
+PyMuPDF==1.28.2
