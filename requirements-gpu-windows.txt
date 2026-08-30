@@ -1,0 +1,3 @@
+# Windows x64 + Python 3.11 + NVIDIA GPU (CUDA 13.0 runtime)
+# Install together with requirements.txt.
+torch @ https://mirrors.aliyun.com/pytorch-wheels/cu130/torch-2.13.0%2Bcu130-cp311-cp311-win_amd64.whl
