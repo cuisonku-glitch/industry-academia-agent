@@ -1,0 +1,189 @@
+{
+  "schema_version": "1.0",
+  "notice_zh": "本数据集完全由项目维护者合成，仅用于演示，不对应任何真实论文、教师、学生或实验结果。",
+  "notice_en": "This dataset is entirely synthetic and is only for demonstration. It does not represent real papers, people, or experimental results.",
+  "chunks": [
+    {
+      "chunk_id": "synthetic_flexible_detector_chunk_0001",
+      "text": "合成示例研究提出一种面向柔性X射线探测器的低温溶液制备流程。样品在低于一百摄氏度的条件下完成薄膜沉积，并通过柔性基底弯折测试验证工艺兼容性。本段所有数值和结论均为演示用途，不代表真实实验。",
+      "metadata": {
+        "file_name": "synthetic_flexible_xray_detector.pdf",
+        "title": "柔性X射线探测材料的低温制备（合成示例）",
+        "author": "示例学生甲",
+        "teacher": "示例教师",
+        "year": 2026,
+        "page_start": 1,
+        "page_end": 1
+      }
+    },
+    {
+      "chunk_id": "synthetic_flexible_detector_chunk_0002",
+      "text": "为满足工业无损检测中的弱信号识别需求，合成示例系统采用低噪声信号读出和像素校准方法，提高了低剂量条件下的响应稳定性。研究目标包括高灵敏度信号读出与柔性原理样机验证，内容仅用于软件流程测试。",
+      "metadata": {
+        "file_name": "synthetic_flexible_xray_detector.pdf",
+        "title": "柔性X射线探测材料的低温制备（合成示例）",
+        "author": "示例学生甲",
+        "teacher": "示例教师",
+        "year": 2026,
+        "page_start": 2,
+        "page_end": 2
+      }
+    },
+    {
+      "chunk_id": "synthetic_large_area_imaging_chunk_0001",
+      "text": "合成示例论文研究大面积闪烁屏的连续涂布与像素化成形。流程通过可重复的涂布间隙和分区固化控制面内均匀性，目标是支持低成本、大面积X射线成像部件的快速制备。本内容不来自任何真实论文。",
+      "metadata": {
+        "file_name": "synthetic_large_area_imaging.pdf",
+        "title": "大面积闪烁成像工艺研究（合成示例）",
+        "author": "示例学生乙",
+        "teacher": "示例教师",
+        "year": 2026,
+        "page_start": 1,
+        "page_end": 1
+      }
+    },
+    {
+      "chunk_id": "synthetic_large_area_imaging_chunk_0002",
+      "text": "针对安全检查和工业检测场景，合成示例系统采用像素化闪烁结构降低光串扰，并设计模块化拼接方式扩大有效成像面积。相关技术方向包括大面积涂布工艺、像素化闪烁成像和高端X射线成像设备验证。",
+      "metadata": {
+        "file_name": "synthetic_large_area_imaging.pdf",
+        "title": "大面积闪烁成像工艺研究（合成示例）",
+        "author": "示例学生乙",
+        "teacher": "示例教师",
+        "year": 2026,
+        "page_start": 2,
+        "page_end": 2
+      }
+    }
+  ],
+  "capability_records": [
+    {
+      "paper": {
+        "file_name": "synthetic_flexible_xray_detector.pdf",
+        "title": "柔性X射线探测材料的低温制备（合成示例）",
+        "author": "示例学生甲",
+        "teacher": "示例教师",
+        "year": 2026
+      },
+      "research_problem": "面向柔性工业检测场景验证低温制备与弱信号读出流程。",
+      "research_direction": [
+        "柔性X射线探测"
+      ],
+      "core_technologies": [
+        "低温溶液制备",
+        "高灵敏度信号读出"
+      ],
+      "applications": [
+        "工业无损检测"
+      ],
+      "industry_potential": [
+        "柔性X射线探测器原理样机"
+      ],
+      "evidence_map": [
+        {
+          "field": "research_direction",
+          "claim": "柔性X射线探测",
+          "sources": [
+            {"chunk_id": "synthetic_flexible_detector_chunk_0001", "page_start": 1, "page_end": 1}
+          ]
+        },
+        {
+          "field": "core_technologies",
+          "claim": "低温溶液制备",
+          "sources": [
+            {"chunk_id": "synthetic_flexible_detector_chunk_0001", "page_start": 1, "page_end": 1}
+          ]
+        },
+        {
+          "field": "core_technologies",
+          "claim": "高灵敏度信号读出",
+          "sources": [
+            {"chunk_id": "synthetic_flexible_detector_chunk_0002", "page_start": 2, "page_end": 2}
+          ]
+        },
+        {
+          "field": "applications",
+          "claim": "工业无损检测",
+          "sources": [
+            {"chunk_id": "synthetic_flexible_detector_chunk_0002", "page_start": 2, "page_end": 2}
+          ]
+        },
+        {
+          "field": "industry_potential",
+          "claim": "柔性X射线探测器原理样机",
+          "sources": [
+            {"chunk_id": "synthetic_flexible_detector_chunk_0002", "page_start": 2, "page_end": 2}
+          ]
+        }
+      ]
+    },
+    {
+      "paper": {
+        "file_name": "synthetic_large_area_imaging.pdf",
+        "title": "大面积闪烁成像工艺研究（合成示例）",
+        "author": "示例学生乙",
+        "teacher": "示例教师",
+        "year": 2026
+      },
+      "research_problem": "验证大面积、低成本闪烁成像部件的连续制备与模块化拼接流程。",
+      "research_direction": [
+        "大面积X射线成像"
+      ],
+      "core_technologies": [
+        "大面积涂布工艺",
+        "像素化闪烁成像"
+      ],
+      "applications": [
+        "安全检查成像",
+        "工业检测"
+      ],
+      "industry_potential": [
+        "高端X射线成像设备"
+      ],
+      "evidence_map": [
+        {
+          "field": "research_direction",
+          "claim": "大面积X射线成像",
+          "sources": [
+            {"chunk_id": "synthetic_large_area_imaging_chunk_0001", "page_start": 1, "page_end": 1}
+          ]
+        },
+        {
+          "field": "core_technologies",
+          "claim": "大面积涂布工艺",
+          "sources": [
+            {"chunk_id": "synthetic_large_area_imaging_chunk_0001", "page_start": 1, "page_end": 1}
+          ]
+        },
+        {
+          "field": "core_technologies",
+          "claim": "像素化闪烁成像",
+          "sources": [
+            {"chunk_id": "synthetic_large_area_imaging_chunk_0002", "page_start": 2, "page_end": 2}
+          ]
+        },
+        {
+          "field": "applications",
+          "claim": "安全检查成像",
+          "sources": [
+            {"chunk_id": "synthetic_large_area_imaging_chunk_0002", "page_start": 2, "page_end": 2}
+          ]
+        },
+        {
+          "field": "applications",
+          "claim": "工业检测",
+          "sources": [
+            {"chunk_id": "synthetic_large_area_imaging_chunk_0002", "page_start": 2, "page_end": 2}
+          ]
+        },
+        {
+          "field": "industry_potential",
+          "claim": "高端X射线成像设备",
+          "sources": [
+            {"chunk_id": "synthetic_large_area_imaging_chunk_0002", "page_start": 2, "page_end": 2}
+          ]
+        }
+      ]
+    }
+  ]
+}

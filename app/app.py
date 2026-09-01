@@ -62,8 +62,8 @@ def get_rag_pipeline() -> RAGPipeline:
 with st.sidebar:
     st.title("🔬 产学研 Agent")
     st.caption("从论文证据出发，连接企业技术需求与教师科研能力。")
-    st.markdown("**当前数据集**")
-    st.markdown("- 教师：1 位\n- 论文：3 篇\n- 向量 Chunk：630 条")
+    st.markdown("**本地数据集**")
+    st.caption("论文、教师画像和向量数据库只保存在当前电脑，不包含在公开仓库中。")
     st.info("企业匹配完全本地运行；论文问答需要调用 Moonshot API。")
 
 st.title("产学研合作智能分析")
@@ -78,7 +78,7 @@ with matching_tab:
         placeholder="例如：我们正在开发……目前遇到……希望获得……能力，并满足……约束。",
         help="请直接填写真实业务描述。页面不会自动填入指南示例。",
     )
-    if st.button("开始分析", type="primary", use_container_width=True):
+    if st.button("开始分析", type="primary", width="stretch"):
         if not enterprise_request.strip():
             st.error("请先输入企业需求原话。")
         else:
@@ -102,7 +102,7 @@ with qa_tab:
     consent = st.checkbox(
         "我同意将本地检索到的最多 5 个论文片段发送到 .env 配置的 Moonshot API。"
     )
-    if st.button("查询论文", use_container_width=True):
+    if st.button("查询论文", width="stretch"):
         if not paper_question.strip():
             st.error("请先输入论文问题。")
         elif not consent:

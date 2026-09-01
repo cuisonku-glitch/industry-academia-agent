@@ -9,6 +9,7 @@ venv/
 
 # Environment variables
 .env
+.streamlit/secrets.toml
 
 # IDE
 .vscode/

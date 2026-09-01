@@ -1,0 +1,3 @@
+# CPU-only PyTorch, tested with Python 3.11.
+# Install together with requirements.txt.
+torch==2.13.0

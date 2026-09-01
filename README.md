@@ -1,179 +1,137 @@
-# Industry–Academia Agent
+# 产学研 Agent
 
-A minimal industry–academia matching Agent built from a small collection of graduate theses.
+[中文](README.md) | [English](README_EN.md)
 
-## Current status
+一个以论文证据为基础的产学研匹配原型：在本地解析论文、建立向量数据库和教师科研画像，再将企业原始需求与教师能力进行可复算匹配。Streamlit 网页同时提供企业需求匹配和带页码引用的论文问答。
 
-- Project directory structure created
-- Conda environment: `industry_agent`
-- Python version: 3.11
-- GPU: NVIDIA GeForce RTX 4070
-- PyTorch: 2.13.0+cu130
-- Local embeddings and ChromaDB vector retrieval verified
-- Grounded RAG with `kimi-k3` verified against the Moonshot China API
-- Traceable capability extraction verified for all three indexed papers
-- Deterministic teacher research profile verified from three paper records
-- Evidence-grounded enterprise need parsing verified with the guide example
-- Transparent hybrid research-industry matching verified with local paper evidence
-- Six-role Agent workflow verified with an auditable Coordinator trace
-- Streamlit matching and paper-QA interface verified in a real local browser
+> 数据说明：公开仓库不包含真实论文、教师画像、企业需求、向量数据库或 API Key。`examples/` 中的数据完全由项目维护者合成，只用于验证安装和演示流程。
 
-Development follows the steps in the project guide. Each module is implemented and verified independently.
+## 主要功能
 
-## Install dependencies
+- 本地解析 PDF 文本并按页码切分 Chunk
+- 使用 `BAAI/bge-small-zh-v1.5` 在 CPU 或 NVIDIA GPU 上生成本地 Embedding
+- 使用 ChromaDB 保存和检索论文证据
+- 从论文证据生成可回溯的科研能力与教师画像
+- 将企业原始需求解析为结构化科研需求
+- 通过固定权重计算可复现的教师匹配分数
+- 由六个角色 Agent 记录完整执行和证据审查轨迹
+- 使用 Moonshot/Kimi 对本地检索出的最多五个片段进行有依据问答
+- 提供 Windows 一键安装、示例数据和双击启动脚本
 
-For the current Windows, Python 3.11, and NVIDIA GPU environment:
+## Windows 快速开始
+
+要求：Windows 10/11、64 位系统和网络连接。安装器会寻找 Miniconda、Anaconda 或 Miniforge；如果均未安装，会询问是否从官方地址安装 Miniconda。
+
+1. 下载或克隆仓库。
+2. 双击 `安装环境.cmd`，等待依赖和本地 BGE 模型安装完成。
+3. 首次体验可双击 `安装示例数据.cmd`。如果电脑中已有真实数据，脚本会停止而不是混入示例数据。
+4. 双击 `启动网页Demo.cmd`，浏览器会自动打开 `http://127.0.0.1:8501`。
+5. 不使用网页时关闭启动窗口，或在窗口中按 `Ctrl+C`。
+
+英文文件名提供相同功能：
+
+- `Setup-Windows.cmd`
+- `Install-Sample-Data.cmd`
+- `Start-Web-Demo.cmd`
+
+CPU 电脑可以从终端运行：
 
 ```powershell
-python -m pip install -r requirements.txt -r requirements-gpu-windows.txt
+.\Setup-Windows.cmd -CpuOnly
 ```
 
-The GPU requirement is kept separate so the base project remains portable to CPU-only and non-Windows systems.
+完整安装、真实论文导入和故障排查参见：[Windows 与手动安装指南](docs/INSTALL.zh-CN.md)。
 
-## Run the RAG demo
+## 使用自己的数据
 
-Create `.env` from `.env.example`, add your Moonshot API key, activate the
-`industry_agent` Conda environment, and run:
+1. 将有权处理的论文 PDF 放入 `data/raw/papers/`。
+2. 在 `src/ingestion/chunker.py` 的 `PAPER_METADATA` 中填写作者、教师和年份。
+3. 建立本地向量数据库：
 
 ```powershell
-python src/retrieval/rag.py
+conda activate industry_agent
+python src/retrieval/vector_store.py
 ```
 
-The demo embeds the question locally on the GPU, retrieves the top five ChromaDB
-chunks, sends only those chunks to Kimi, and prints a grounded answer followed by
-deterministic paper and page references. Kimi thinking mode is disabled for this
-short evidence-based task so the output-token budget is reserved for the answer.
-Broad questions such as “这个老师研究什么？” are expanded only with local teacher
-and paper-title metadata, then retrieve at least one best Chunk from every indexed
-paper before the remaining Top-K positions are filled globally. This prevents one
-paper from dominating a teacher-overview answer.
-
-On Windows, ChromaDB is stored at
-`C:\Users\<username>\.industry-academia-agent\vector_db`. This user-home location
-avoids Chinese-path limitations and Microsoft Store per-app `LOCALAPPDATA`
-virtualization. The project `data\vector_db` entry may be a Junction to that path.
-
-## Extract research capabilities
-
-Preview the locally selected evidence without calling Moonshot:
+4. 能力抽取会把选中的论文片段发送到 `.env` 配置的 Moonshot 接口。先预览，确认范围后再明确执行发送：
 
 ```powershell
 python src/extraction/capability_extractor.py
-```
-
-After reviewing and approving the displayed data scope, run the extraction with:
-
-```powershell
 python src/extraction/capability_extractor.py --send-to-moonshot
-```
-
-Each paper is saved as a UTF-8 JSON file under `data/processed/capabilities`.
-Required capability fields remain separate from `evidence_map`; every non-empty
-claim must reference a real source label, and `sources` retains the original Chunk
-text, Chunk ID, and page range. This output directory is intentionally ignored by
-Git because the records contain excerpts from the source papers.
-
-Dataset v0.1 validation produced three local JSON records with 72 capability
-claims in total. All 72 claims have validated Chunk and page evidence mappings.
-
-## Build teacher research profiles
-
-Aggregate the validated per-paper records locally without another LLM call:
-
-```powershell
 python src/extraction/teacher_profiler.py
 ```
 
-The profile preserves the guide's teacher, research direction, core capability,
-representative paper, application domain, and potential industry fields. Its
-`evidence_map` links every aggregated value back to a paper, original stage-6
-claim, Chunk ID, and page range. Generated profiles remain local and are ignored
-by Git.
+5. 双击网页启动脚本并输入企业真实需求。
 
-## Parse enterprise needs
+## Moonshot/Kimi 配置
 
-Run the guide's industrial X-ray inspection example only in explicit demo mode:
+企业需求匹配完全在本地运行，不需要 API Key。只有论文问答和显式能力抽取需要 Moonshot。
 
-```powershell
-python src/extraction/enterprise_parser.py --demo
+安装器会在缺少 `.env` 时从 `.env.example` 创建一份本地文件：
+
+```dotenv
+MOONSHOT_API_KEY=
+MOONSHOT_BASE_URL=https://api.moonshot.cn/v1
+MOONSHOT_MODEL=kimi-k3
 ```
 
-For another requirement, pass the original product-language description:
+填写 API Key 后不要提交 `.env`。网页只有在用户勾选同意后，才会发送本地检索出的最多五个论文片段；API Key 不会显示在页面中。
+
+## 常用命令
 
 ```powershell
-python src/extraction/enterprise_parser.py --text "我们开发工业 X 射线探伤设备，希望寻找低成本、高灵敏度的探测材料。"
-```
+# 运行全部离线测试
+python -m unittest discover -s tests -v
 
-The parser separates industry, product, technical problems, required research
-capabilities, constraints, and keywords. Every non-empty derived field retains
-the exact phrase that triggered it in `evidence_map`. Generated enterprise need
-profiles remain local and are ignored by Git.
-
-## Match enterprise needs to teacher research
-
-After stages 5-8 have produced the vector database, teacher profile, and enterprise
-need profile, run:
-
-```powershell
-python src/matching/matcher.py
-```
-
-The stage-9 score is deterministic and reproducible: overall semantic similarity
-contributes 45%, required-capability coverage 25%, application-domain matching
-15%, and relevant paper-evidence count 15%. The output exposes every raw value,
-weight, and point contribution instead of asking an LLM for a subjective score.
-It also includes the recommended teacher, core matching technologies, relevant
-papers, Chunk/page evidence, matching reasons, technology gaps, and potential
-collaboration directions. This stage uses only the local BGE model and ChromaDB;
-it does not call Moonshot. Generated matching results remain local and are ignored
-by Git.
-
-## Run the Agent workflow
-
-Stage 10 coordinates the verified modules through Requirement, Research, Paper,
-Matching, Evidence, and Report agents. The Coordinator records each handoff and
-stops the report from presenting unreviewed evidence as verified.
-
-Run the guide example only when you explicitly want a demonstration:
-
-```powershell
-python src/agents/workflow.py --demo
-```
-
-Run a real enterprise request by passing its original wording:
-
-```powershell
+# 运行六 Agent 工作流
 python src/agents/workflow.py --text "企业需求原话"
-```
 
-There is deliberately no silent default request. Structured run state and the
-Markdown report are saved under `data/processed/agent_runs`, remain local, and
-are ignored by Git. The workflow uses the local BGE model and ChromaDB and does
-not call Moonshot.
+# 运行带 Kimi 的论文 RAG
+python src/retrieval/rag.py
 
-## Run the Streamlit demo
-
-On Windows, the simplest option is to double-click `启动网页Demo.cmd` in the
-project root. The launcher uses the `industry_agent` environment directly,
-starts the local service, waits until it is ready, and then opens the browser at
-`http://127.0.0.1:8501`. Keep the launcher window open while using the demo;
-close it or press `Ctrl+C` to stop the service. If the demo is already running,
-double-clicking the launcher simply opens the existing page.
-
-To start it manually, activate the Conda environment, enter the project directory,
-and run:
-
-```powershell
+# 手动启动网页
 python -m streamlit run app/app.py
 ```
 
-Open `http://127.0.0.1:8501` if the browser does not open automatically. The
-**Enterprise Need Matching** tab accepts only text entered by the user and runs
-the local six-agent workflow. It displays the recommended teacher, matching
-score, core technologies, relevant papers, Chunk/page evidence, matching reasons,
-technology gaps, collaboration directions, and reproducible score details.
+## 数据与隐私边界
 
-The **Paper Q&A** tab performs local retrieval and then uses Kimi for the grounded
-answer. It will not make the API call until the user explicitly checks the consent
-box allowing up to five retrieved paper chunks to be sent to the Moonshot endpoint
-configured in `.env`. The API key remains local and is never rendered by the page.
+以下内容由 `.gitignore` 排除，不会随正常 Git 提交上传：
+
+- `.env` 与 Moonshot API Key
+- `data/raw/` 中的论文原文
+- `data/vector_db/` 与 Windows 用户目录中的本地 ChromaDB
+- 能力记录、教师画像、企业需求、匹配结果和 Agent 运行记录
+- 下载的本地模型缓存
+
+公开前仍应执行一次敏感信息扫描，并确保拥有论文和企业数据的处理权限。
+
+## 项目结构
+
+```text
+app/                  Streamlit 网页
+examples/             完全合成的公开示例数据
+scripts/              Windows 安装、启动和示例初始化逻辑
+src/ingestion/        PDF 解析与 Chunk 切分
+src/retrieval/        Embedding、ChromaDB 和 RAG
+src/extraction/       科研能力、教师画像和企业需求解析
+src/matching/         透明加权匹配
+src/agents/           六 Agent 协调与报告
+tests/                离线单元测试和 Streamlit 测试
+docs/                 安装、验收与版本说明
+```
+
+## 当前限制
+
+- 真实论文数据未包含在仓库中，需要使用者自行导入并确认版权和授权。
+- 当前 PDF 流程主要处理文本，不解析论文图片、复杂表格或扫描页 OCR。
+- 公开示例数据仅验证软件流程，不代表真实科研成果或匹配结论。
+- 当前版本是本地单机原型，不包含账号权限、多租户数据库或公网部署。
+
+## 版本
+
+- `v0.1.0`：首次可运行的本地 MVP。
+- `v0.1.1`：增加双语文档、MIT 许可证、通用 Windows 安装/启动器和合成示例数据。
+
+## 许可证
+
+代码采用 [MIT License](LICENSE)。论文、企业数据和其他第三方内容不因本代码许可证而自动获得授权。
