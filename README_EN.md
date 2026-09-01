@@ -42,6 +42,8 @@ On a CPU-only computer, run:
 
 See the [full installation and data guide](docs/INSTALL.en.md) for manual setup, real-paper ingestion, and troubleshooting.
 
+See the [product design and development roadmap (Chinese)](docs/PRODUCT_ROADMAP.zh-CN.md) for the planned dual-sided interface, enterprise solution workflow, academic paper workbench, and explainable paper lineage map.
+
 ## Use your own data
 
 1. Put PDFs that you are authorized to process in `data/raw/papers/`.

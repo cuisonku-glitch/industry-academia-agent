@@ -42,6 +42,8 @@ CPU 电脑可以从终端运行：
 
 完整安装、真实论文导入和故障排查参见：[Windows 与手动安装指南](docs/INSTALL.zh-CN.md)。
 
+双端网页、企业组合方案、院校论文工作台和论文谱系版图的后续设计参见：[产品设计与开发路线图](docs/PRODUCT_ROADMAP.zh-CN.md)。
+
 ## 使用自己的数据
 
 1. 将有权处理的论文 PDF 放入 `data/raw/papers/`。
