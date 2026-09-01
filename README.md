@@ -11,7 +11,7 @@ A minimal industry–academia matching Agent built from a small collection of gr
 - PyTorch: 2.13.0+cu130
 - Local embeddings and ChromaDB vector retrieval verified
 - Grounded RAG with `kimi-k3` verified against the Moonshot China API
-- Traceable per-paper capability extraction dry-run verified
+- Traceable capability extraction verified for all three indexed papers
 
 Development follows the steps in the project guide. Each module is implemented and verified independently.
 
@@ -63,3 +63,6 @@ Required capability fields remain separate from `evidence_map`; every non-empty
 claim must reference a real source label, and `sources` retains the original Chunk
 text, Chunk ID, and page range. This output directory is intentionally ignored by
 Git because the records contain excerpts from the source papers.
+
+Dataset v0.1 validation produced three local JSON records with 72 capability
+claims in total. All 72 claims have validated Chunk and page evidence mappings.
