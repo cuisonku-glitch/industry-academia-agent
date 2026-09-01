@@ -1,0 +1,8 @@
+[server]
+# The text-only BGE pipeline does not need Streamlit to inspect every imported
+# Transformers vision module. Disabling the watcher prevents optional torchvision
+# imports while keeping the app itself unchanged.
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false
