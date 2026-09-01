@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import copy
+import contextlib
+import io
+import sys
 import unittest
+from unittest.mock import patch
 
 from src.extraction.enterprise_parser import (
     DEFAULT_REQUEST,
     parse_enterprise_need,
+    parse_args,
     validate_enterprise_profile,
 )
 
@@ -60,6 +65,16 @@ class EnterpriseParserTests(unittest.TestCase):
         invalid["required_capabilities"].append("不存在的能力")
         with self.assertRaisesRegex(RuntimeError, "不一致"):
             validate_enterprise_profile(invalid)
+
+    def test_cli_does_not_silently_use_the_guide_example(self) -> None:
+        with patch.object(sys, "argv", ["enterprise_parser.py"]):
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    parse_args()
+
+    def test_cli_requires_explicit_demo_flag_for_the_guide_example(self) -> None:
+        with patch.object(sys, "argv", ["enterprise_parser.py", "--demo"]):
+            self.assertTrue(parse_args().demo)
 
 
 if __name__ == "__main__":

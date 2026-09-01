@@ -27,6 +27,7 @@ data/processed/capabilities/
 data/processed/teacher_profiles/
 data/processed/enterprise_needs/
 data/processed/matches/
+data/processed/agent_runs/
 
 # Downloaded local AI models
 .cache/

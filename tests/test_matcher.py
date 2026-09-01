@@ -41,6 +41,9 @@ class FakeEmbedder:
 
 
 class FakeVectorStore:
+    def __init__(self) -> None:
+        self.query_calls = 0
+
     def count(self) -> int:
         return 10
 
@@ -50,6 +53,7 @@ class FakeVectorStore:
         top_k: int,
         where: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
+        self.query_calls += 1
         teacher = (where or {}).get("teacher", "徐修文")
         return [
             {
@@ -188,6 +192,22 @@ class MatcherTests(unittest.TestCase):
             [item["recommended_teacher"] for item in result["recommendations"]],
             ["另一位老师", "徐修文"],
         )
+
+    def test_precomputed_paper_evidence_is_reused_by_matching_agent(self) -> None:
+        store = FakeVectorStore()
+        matcher = ResearchIndustryMatcher(
+            embedder=FakeEmbedder(),
+            vector_store=store,
+            capability_threshold=0.8,
+            paper_threshold=0.45,
+        )
+        matcher.match(
+            make_enterprise(),
+            [make_teacher_profile()],
+            top_k=3,
+            paper_evidence_by_teacher={"徐修文": []},
+        )
+        self.assertEqual(store.query_calls, 0)
 
 
 if __name__ == "__main__":

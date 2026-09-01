@@ -263,21 +263,26 @@ def save_enterprise_profile(profile: dict[str, Any], output_path: Path) -> Path:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="把企业产品语言解析为科研需求画像")
-    source_group = parser.add_mutually_exclusive_group()
+    source_group = parser.add_mutually_exclusive_group(required=True)
     source_group.add_argument("--text", help="企业需求文本")
     source_group.add_argument("--input-file", type=Path, help="UTF-8 企业需求文本文件")
+    source_group.add_argument(
+        "--demo",
+        action="store_true",
+        help="显式使用操作指南中的 X 射线探伤示例",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_PATH)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    if args.input_file:
-        request_text = args.input_file.read_text(encoding="utf-8")
-    elif args.text:
-        request_text = args.text
-    else:
+    if args.demo:
         request_text = DEFAULT_REQUEST
+    elif args.input_file:
+        request_text = args.input_file.read_text(encoding="utf-8")
+    else:
+        request_text = args.text
 
     profile = parse_enterprise_need(request_text)
     output_path = save_enterprise_profile(profile, args.output)

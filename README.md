@@ -15,6 +15,7 @@ A minimal industry–academia matching Agent built from a small collection of gr
 - Deterministic teacher research profile verified from three paper records
 - Evidence-grounded enterprise need parsing verified with the guide example
 - Transparent hybrid research-industry matching verified with local paper evidence
+- Six-role Agent workflow verified with an auditable Coordinator trace
 
 Development follows the steps in the project guide. Each module is implemented and verified independently.
 
@@ -86,10 +87,10 @@ by Git.
 
 ## Parse enterprise needs
 
-Run the guide's industrial X-ray inspection example locally:
+Run the guide's industrial X-ray inspection example only in explicit demo mode:
 
 ```powershell
-python src/extraction/enterprise_parser.py
+python src/extraction/enterprise_parser.py --demo
 ```
 
 For another requirement, pass the original product-language description:
@@ -121,3 +122,26 @@ papers, Chunk/page evidence, matching reasons, technology gaps, and potential
 collaboration directions. This stage uses only the local BGE model and ChromaDB;
 it does not call Moonshot. Generated matching results remain local and are ignored
 by Git.
+
+## Run the Agent workflow
+
+Stage 10 coordinates the verified modules through Requirement, Research, Paper,
+Matching, Evidence, and Report agents. The Coordinator records each handoff and
+stops the report from presenting unreviewed evidence as verified.
+
+Run the guide example only when you explicitly want a demonstration:
+
+```powershell
+python src/agents/workflow.py --demo
+```
+
+Run a real enterprise request by passing its original wording:
+
+```powershell
+python src/agents/workflow.py --text "企业需求原话"
+```
+
+There is deliberately no silent default request. Structured run state and the
+Markdown report are saved under `data/processed/agent_runs`, remain local, and
+are ignored by Git. The workflow uses the local BGE model and ChromaDB and does
+not call Moonshot.

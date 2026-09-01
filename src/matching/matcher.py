@@ -294,9 +294,10 @@ class ResearchIndustryMatcher:
         best_index = max(range(len(scores)), key=scores.__getitem__)
         return scores[best_index], application_items[best_index]
 
-    def _retrieve_paper_evidence(
+    def retrieve_paper_evidence(
         self, enterprise_query: str, teacher: str, top_k: int
     ) -> list[dict[str, Any]]:
+        """Retrieve traceable paper evidence for one teacher and enterprise query."""
         if self.vector_store.count() == 0:
             raise RuntimeError("向量数据库为空，请先运行 vector_store.py 建库")
         query_vector = self.embedder.embed_queries([enterprise_query])[0]
@@ -332,6 +333,7 @@ class ResearchIndustryMatcher:
         enterprise: dict[str, Any],
         profile: dict[str, Any],
         top_k: int = DEFAULT_TOP_K,
+        paper_evidence: Sequence[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         if top_k <= 0:
             raise ValueError("top_k 必须大于 0")
@@ -350,9 +352,12 @@ class ResearchIndustryMatcher:
         application_score, closest_application = self._application_score(
             enterprise, profile
         )
-        paper_evidence = self._retrieve_paper_evidence(
-            enterprise_query, teacher, top_k
-        )
+        if paper_evidence is None:
+            paper_evidence = self.retrieve_paper_evidence(
+                enterprise_query, teacher, top_k
+            )
+        else:
+            paper_evidence = list(paper_evidence)
         evidence_count_score = min(len(paper_evidence) / top_k, 1.0)
         matching_score, breakdown = calculate_weighted_score(
             {
@@ -400,13 +405,26 @@ class ResearchIndustryMatcher:
         enterprise: dict[str, Any],
         teacher_profiles: Sequence[dict[str, Any]],
         top_k: int = DEFAULT_TOP_K,
+        paper_evidence_by_teacher: dict[str, list[dict[str, Any]]] | None = None,
     ) -> dict[str, Any]:
         if not teacher_profiles:
             raise RuntimeError("没有可用于匹配的教师画像")
-        recommendations = [
-            self.match_teacher(enterprise, profile, top_k=top_k)
-            for profile in teacher_profiles
-        ]
+        recommendations = []
+        for profile in teacher_profiles:
+            teacher = str(profile.get("teacher", "")).strip()
+            precomputed_evidence = (
+                paper_evidence_by_teacher.get(teacher)
+                if paper_evidence_by_teacher is not None
+                else None
+            )
+            recommendations.append(
+                self.match_teacher(
+                    enterprise,
+                    profile,
+                    top_k=top_k,
+                    paper_evidence=precomputed_evidence,
+                )
+            )
         recommendations.sort(
             key=lambda item: (-item["matching_score"], item["recommended_teacher"])
         )
