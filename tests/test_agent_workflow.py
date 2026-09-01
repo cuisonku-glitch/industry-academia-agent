@@ -17,6 +17,7 @@ from src.agents.workflow import (
     ResearchAgent,
     new_state,
 )
+from src.agents.coordinator import build_coordinator
 
 
 def make_teacher_profile() -> dict[str, Any]:
@@ -203,6 +204,12 @@ class AgentWorkflowTests(unittest.TestCase):
         state["match_result"] = tampered
         EvidenceAgent().run(state)
         self.assertEqual(state["evidence_review"]["overall_status"], "needs_review")
+
+    def test_production_builder_reuses_one_matcher_across_agents(self) -> None:
+        matcher = FakeMatcher()
+        coordinator = build_coordinator(matcher=matcher)
+        self.assertIs(coordinator.agents[2].matcher, matcher)
+        self.assertIs(coordinator.agents[3].matcher, matcher)
 
 
 if __name__ == "__main__":

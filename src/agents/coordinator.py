@@ -69,9 +69,10 @@ class Coordinator:
 def build_coordinator(
     teacher_directory: Path = DEFAULT_TEACHER_DIRECTORY,
     top_k: int = DEFAULT_TOP_K,
+    matcher: ResearchIndustryMatcher | None = None,
 ) -> Coordinator:
     """Create production agents sharing one local matcher and vector store."""
-    matcher = ResearchIndustryMatcher()
+    matcher = matcher or ResearchIndustryMatcher()
     return Coordinator(
         requirement_agent=RequirementAgent(),
         research_agent=ResearchAgent(teacher_directory=teacher_directory),

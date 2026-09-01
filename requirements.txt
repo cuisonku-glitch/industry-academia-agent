@@ -10,3 +10,6 @@ chromadb==1.5.9
 # Kimi API and environment configuration
 openai==3.6.0
 python-dotenv==1.2.3
+
+# Local web demo
+streamlit==1.62.0

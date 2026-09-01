@@ -16,6 +16,7 @@ A minimal industry–academia matching Agent built from a small collection of gr
 - Evidence-grounded enterprise need parsing verified with the guide example
 - Transparent hybrid research-industry matching verified with local paper evidence
 - Six-role Agent workflow verified with an auditable Coordinator trace
+- Streamlit matching and paper-QA interface verified in a real local browser
 
 Development follows the steps in the project guide. Each module is implemented and verified independently.
 
@@ -145,3 +146,23 @@ There is deliberately no silent default request. Structured run state and the
 Markdown report are saved under `data/processed/agent_runs`, remain local, and
 are ignored by Git. The workflow uses the local BGE model and ChromaDB and does
 not call Moonshot.
+
+## Run the Streamlit demo
+
+Activate the Conda environment, enter the project directory, and start the local
+web interface with the environment's Python executable:
+
+```powershell
+python -m streamlit run app/app.py
+```
+
+Open `http://127.0.0.1:8501` if the browser does not open automatically. The
+**Enterprise Need Matching** tab accepts only text entered by the user and runs
+the local six-agent workflow. It displays the recommended teacher, matching
+score, core technologies, relevant papers, Chunk/page evidence, matching reasons,
+technology gaps, collaboration directions, and reproducible score details.
+
+The **Paper Q&A** tab performs local retrieval and then uses Kimi for the grounded
+answer. It will not make the API call until the user explicitly checks the consent
+box allowing up to five retrieved paper chunks to be sent to the Moonshot endpoint
+configured in `.env`. The API key remains local and is never rendered by the page.
