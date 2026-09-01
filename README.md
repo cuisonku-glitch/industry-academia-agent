@@ -153,8 +153,15 @@ not call Moonshot.
 
 ## Run the Streamlit demo
 
-Activate the Conda environment, enter the project directory, and start the local
-web interface with the environment's Python executable:
+On Windows, the simplest option is to double-click `启动网页Demo.cmd` in the
+project root. The launcher uses the `industry_agent` environment directly,
+starts the local service, waits until it is ready, and then opens the browser at
+`http://127.0.0.1:8501`. Keep the launcher window open while using the demo;
+close it or press `Ctrl+C` to stop the service. If the demo is already running,
+double-clicking the launcher simply opens the existing page.
+
+To start it manually, activate the Conda environment, enter the project directory,
+and run:
 
 ```powershell
 python -m streamlit run app/app.py
