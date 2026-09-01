@@ -24,6 +24,7 @@ data/vector_db/
 
 # Derived records that retain original paper excerpts
 data/processed/capabilities/
+data/processed/teacher_profiles/
 
 # Downloaded local AI models
 .cache/

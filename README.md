@@ -12,6 +12,7 @@ A minimal industry–academia matching Agent built from a small collection of gr
 - Local embeddings and ChromaDB vector retrieval verified
 - Grounded RAG with `kimi-k3` verified against the Moonshot China API
 - Traceable capability extraction verified for all three indexed papers
+- Deterministic teacher research profile verified from three paper records
 
 Development follows the steps in the project guide. Each module is implemented and verified independently.
 
@@ -66,3 +67,17 @@ Git because the records contain excerpts from the source papers.
 
 Dataset v0.1 validation produced three local JSON records with 72 capability
 claims in total. All 72 claims have validated Chunk and page evidence mappings.
+
+## Build teacher research profiles
+
+Aggregate the validated per-paper records locally without another LLM call:
+
+```powershell
+python src/extraction/teacher_profiler.py
+```
+
+The profile preserves the guide's teacher, research direction, core capability,
+representative paper, application domain, and potential industry fields. Its
+`evidence_map` links every aggregated value back to a paper, original stage-6
+claim, Chunk ID, and page range. Generated profiles remain local and are ignored
+by Git.
