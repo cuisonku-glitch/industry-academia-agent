@@ -22,6 +22,8 @@ Thumbs.db
 # Raw research data
 data/raw/
 data/vector_db/
+data/metadata/
+data/evaluation/
 
 # Derived records that retain original paper excerpts
 data/processed/capabilities/

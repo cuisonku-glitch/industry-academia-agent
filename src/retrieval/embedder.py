@@ -11,13 +11,15 @@ import torch
 from sentence_transformers import SentenceTransformer
 
 try:
-    from ..ingestion.chunker import PAPER_METADATA, chunk_document
+    from ..ingestion.chunker import CHUNKER_VERSION, chunk_document
     from ..ingestion.pdf_parser import parse_papers
+    from ..repository import PaperCatalog, load_metadata_seed, sync_parsed_papers
 except ImportError:
     project_root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(project_root))
-    from src.ingestion.chunker import PAPER_METADATA, chunk_document
+    from src.ingestion.chunker import CHUNKER_VERSION, chunk_document
     from src.ingestion.pdf_parser import parse_papers
+    from src.repository import PaperCatalog, load_metadata_seed, sync_parsed_papers
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -65,7 +67,9 @@ class LocalEmbedder:
         )
         token_lengths = [len(input_ids) for input_ids in tokenized["input_ids"]]
         oversized = [
-            index for index, length in enumerate(token_lengths) if length > self.model.max_seq_length
+            index
+            for index, length in enumerate(token_lengths)
+            if length > self.model.max_seq_length
         ]
         if oversized:
             positions = "、".join(str(index + 1) for index in oversized)
@@ -110,10 +114,19 @@ def load_test_chunks(limit: int = 3) -> list[dict[str, Any]]:
         return []
 
     test_chunks: list[dict[str, Any]] = []
-    for parsed_pdf in parse_papers():
+    parsed_papers = parse_papers()
+    catalog = PaperCatalog()
+    sync_parsed_papers(
+        catalog,
+        parsed_papers,
+        metadata_by_file=load_metadata_seed(),
+        pipeline_version=CHUNKER_VERSION,
+    )
+    metadata_by_file = catalog.metadata_by_file()
+    for parsed_pdf in parsed_papers:
         paper_chunks = chunk_document(
             parsed_pdf,
-            metadata=PAPER_METADATA.get(parsed_pdf["file_name"]),
+            metadata=metadata_by_file.get(parsed_pdf["file_name"]),
         )
         if paper_chunks:
             test_chunks.append(paper_chunks[0])

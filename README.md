@@ -42,16 +42,17 @@ CPU 电脑可以从终端运行：
 
 完整安装、真实论文导入和故障排查参见：[Windows 与手动安装指南](docs/INSTALL.zh-CN.md)。
 
-双端网页、企业组合方案、院校论文工作台和论文谱系版图的后续设计参见：[产品设计与开发路线图](docs/PRODUCT_ROADMAP.zh-CN.md)。
+双端网页、企业组合方案、院校论文工作台和论文谱系版图的后续设计参见：[产品设计与开发路线图](docs/PRODUCT_ROADMAP.zh-CN.md)；按依赖执行的工程顺序见：[后续完整实施顺序](docs/IMPLEMENTATION_SEQUENCE.zh-CN.md)。
 
 ## 使用自己的数据
 
 1. 将有权处理的论文 PDF 放入 `data/raw/papers/`。
-2. 在 `src/ingestion/chunker.py` 的 `PAPER_METADATA` 中填写作者、教师和年份。
-3. 建立本地向量数据库：
+2. 在 `config/paper_metadata.seed.json` 中填写文件名、作者、导师、年份和方向；首次同步后，本地 SQLite 目录数据库是运行时数据源。
+3. 同步目录并建立当前解析版本的本地向量数据库：
 
 ```powershell
 conda activate industry_agent
+python scripts/sync_paper_catalog.py
 python src/retrieval/vector_store.py
 ```
 
@@ -115,6 +116,8 @@ examples/             完全合成的公开示例数据
 scripts/              Windows 安装、启动和示例初始化逻辑
 src/ingestion/        PDF 解析与 Chunk 切分
 src/retrieval/        Embedding、ChromaDB 和 RAG
+src/repository/       SQLite 论文目录与向量索引接口
+src/evaluation/       离线检索质量指标
 src/extraction/       科研能力、教师画像和企业需求解析
 src/matching/         透明加权匹配
 src/agents/           六 Agent 协调与报告

@@ -12,13 +12,15 @@ from chromadb.config import Settings
 
 try:
     from .embedder import LocalEmbedder
-    from ..ingestion.chunker import PAPER_METADATA, chunk_papers
+    from ..ingestion.chunker import CHUNKER_VERSION, chunk_papers
     from ..ingestion.pdf_parser import parse_papers
+    from ..repository import PaperCatalog, load_metadata_seed, sync_parsed_papers
 except ImportError:
     project_root = Path(__file__).resolve().parents[2]
     sys.path.insert(0, str(project_root))
-    from src.ingestion.chunker import PAPER_METADATA, chunk_papers
+    from src.ingestion.chunker import CHUNKER_VERSION, chunk_papers
     from src.ingestion.pdf_parser import parse_papers
+    from src.repository import PaperCatalog, load_metadata_seed, sync_parsed_papers
     from src.retrieval.embedder import LocalEmbedder
 
 
@@ -29,7 +31,7 @@ WINDOWS_DB_ALIAS = (
     if os.name == "nt"
     else DEFAULT_DB_PATH
 )
-DEFAULT_COLLECTION_NAME = "paper_chunks"
+DEFAULT_COLLECTION_NAME = f"paper_chunks_{CHUNKER_VERSION}"
 DEFAULT_QUERY = "该团队是否研究过 X 射线探测？"
 
 
@@ -58,6 +60,21 @@ class PaperVectorStore:
             configuration={"hnsw": {"space": "cosine"}},
             embedding_function=None,
         )
+        configured_space = self.collection.configuration.get("hnsw", {}).get("space")
+        if configured_space != "cosine":
+            raise RuntimeError(
+                f"向量集合距离类型必须是 cosine，实际为：{configured_space!r}"
+            )
+
+    def close(self) -> None:
+        """Release SQLite/HNSW handles, which is especially important on Windows."""
+        self.client.close()
+
+    def __enter__(self) -> "PaperVectorStore":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
+        self.close()
 
     def upsert_chunks(
         self,
@@ -72,9 +89,15 @@ class PaperVectorStore:
 
         ids = [chunk["chunk_id"] for chunk in chunks]
         documents = [chunk["text"] for chunk in chunks]
-        metadatas = [
-            {"chunk_id": chunk["chunk_id"], **chunk["metadata"]} for chunk in chunks
-        ]
+        metadatas = []
+        for chunk in chunks:
+            raw_metadata = {"chunk_id": chunk["chunk_id"], **chunk["metadata"]}
+            metadata = {
+                key: value
+                for key, value in raw_metadata.items()
+                if value is not None and isinstance(value, (str, int, float, bool))
+            }
+            metadatas.append(metadata)
         self.collection.upsert(
             ids=ids,
             documents=documents,
@@ -204,7 +227,14 @@ def print_results(query: str, results: Sequence[dict[str, Any]]) -> None:
 def main() -> None:
     """Build the local paper vector database and run the required test query."""
     parsed_papers = parse_papers()
-    chunks = chunk_papers(parsed_papers, metadata_by_file=PAPER_METADATA)
+    catalog = PaperCatalog()
+    catalog_records = sync_parsed_papers(
+        catalog,
+        parsed_papers,
+        metadata_by_file=load_metadata_seed(),
+        pipeline_version=CHUNKER_VERSION,
+    )
+    chunks = chunk_papers(parsed_papers, metadata_by_file=catalog.metadata_by_file())
     print(f"待写入 Chunk：{len(chunks)}")
 
     embedder = LocalEmbedder()
@@ -216,6 +246,12 @@ def main() -> None:
     if store.access_directory != store.persist_directory:
         print(f"Windows 兼容入口：{store.access_directory}")
     stored_count = index_chunks(store, chunks, embedder)
+    for record in catalog_records:
+        catalog.update_ingestion_status(
+            record.paper_id,
+            "indexed",
+            pipeline_version=CHUNKER_VERSION,
+        )
     print(f"数据库记录数：{stored_count}")
 
     query_embedding = embedder.embed_queries([DEFAULT_QUERY])[0]

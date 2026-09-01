@@ -42,16 +42,17 @@ On a CPU-only computer, run:
 
 See the [full installation and data guide](docs/INSTALL.en.md) for manual setup, real-paper ingestion, and troubleshooting.
 
-See the [product design and development roadmap (Chinese)](docs/PRODUCT_ROADMAP.zh-CN.md) for the planned dual-sided interface, enterprise solution workflow, academic paper workbench, and explainable paper lineage map.
+See the [product design and development roadmap (Chinese)](docs/PRODUCT_ROADMAP.zh-CN.md) for the planned dual-sided interface, enterprise solution workflow, academic paper workbench, and explainable paper lineage map. The dependency-ordered engineering plan is in the [implementation sequence (Chinese)](docs/IMPLEMENTATION_SEQUENCE.zh-CN.md).
 
 ## Use your own data
 
 1. Put PDFs that you are authorized to process in `data/raw/papers/`.
-2. Add author, teacher, and year metadata to `PAPER_METADATA` in `src/ingestion/chunker.py`.
-3. Build the local vector database:
+2. Add filename, author, teacher, year, and direction metadata to `config/paper_metadata.seed.json`. After the first sync, the local SQLite catalog is the runtime source of truth.
+3. Sync the catalog and build the versioned local vector database:
 
 ```powershell
 conda activate industry_agent
+python scripts/sync_paper_catalog.py
 python src/retrieval/vector_store.py
 ```
 
@@ -115,6 +116,8 @@ examples/             Fully synthetic public sample data
 scripts/              Windows setup, launch, and sample bootstrap logic
 src/ingestion/        PDF parsing and chunking
 src/retrieval/        Embeddings, ChromaDB, and RAG
+src/repository/       SQLite paper catalog and vector-index contract
+src/evaluation/       Offline retrieval quality metrics
 src/extraction/       Capability, teacher, and enterprise parsing
 src/matching/         Transparent weighted matching
 src/agents/           Six-Agent coordination and reports

@@ -96,12 +96,13 @@ On Linux or macOS, install the appropriate PyTorch build for that platform toget
 
 1. Confirm that you are authorized to process the papers and send excerpts to an external API.
 2. Put PDFs in `data/raw/papers/`.
-3. Add author, teacher, and year values to `PAPER_METADATA` in `src/ingestion/chunker.py`.
-4. Parse and index locally:
+3. Add filename, author, teacher, year, and direction values to `config/paper_metadata.seed.json`. After the first sync, the local SQLite catalog is the runtime source of truth.
+4. Parse, sync the catalog, and index locally:
 
 ```powershell
 python src/ingestion/pdf_parser.py
 python src/ingestion/chunker.py
+python scripts/sync_paper_catalog.py
 python src/retrieval/vector_store.py
 ```
 

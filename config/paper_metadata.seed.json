@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "notice": "Bootstrap metadata only. The local SQLite catalog is authoritative after ingestion.",
+  "papers": [
+    {
+      "file_name": "MAPbBr3钙钛矿的直写印刷及其高性能X射线探测器的设计.pdf",
+      "authors": ["周全"],
+      "teacher": "徐修文",
+      "year": 2025,
+      "direction": "x_ray_detector"
+    },
+    {
+      "file_name": "像素化闪烁体的制备及其X射线成像性能研究.pdf",
+      "authors": ["石怀耀"],
+      "teacher": "徐修文",
+      "year": 2025,
+      "direction": "x_ray_imaging"
+    },
+    {
+      "file_name": "基于异质金属掺杂钙钛矿同质结的构筑及其X射线探测器设计.pdf",
+      "authors": ["王亚聪"],
+      "teacher": "徐修文",
+      "year": 2025,
+      "direction": "x_ray_detector"
+    }
+  ]
+}

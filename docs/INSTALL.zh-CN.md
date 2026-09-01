@@ -96,12 +96,13 @@ Linux/macOS 使用对应平台的 PyTorch 安装方式，并安装 `requirements
 
 1. 确认拥有处理论文和发送片段到外部 API 的权限。
 2. 将 PDF 放入 `data/raw/papers/`。
-3. 在 `src/ingestion/chunker.py` 的 `PAPER_METADATA` 中填写每个文件的作者、教师和年份。
-4. 运行文本解析与本地建库：
+3. 在 `config/paper_metadata.seed.json` 中填写每个文件的作者、导师、年份和方向。首次同步后，本地 SQLite 目录数据库是运行时数据源。
+4. 运行文本解析、目录同步与本地建库：
 
 ```powershell
 python src/ingestion/pdf_parser.py
 python src/ingestion/chunker.py
+python scripts/sync_paper_catalog.py
 python src/retrieval/vector_store.py
 ```
 
