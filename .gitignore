@@ -22,6 +22,9 @@ Thumbs.db
 data/raw/
 data/vector_db/
 
+# Derived records that retain original paper excerpts
+data/processed/capabilities/
+
 # Downloaded local AI models
 .cache/
 

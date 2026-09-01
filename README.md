@@ -11,6 +11,7 @@ A minimal industry–academia matching Agent built from a small collection of gr
 - PyTorch: 2.13.0+cu130
 - Local embeddings and ChromaDB vector retrieval verified
 - Grounded RAG with `kimi-k3` verified against the Moonshot China API
+- Traceable per-paper capability extraction dry-run verified
 
 Development follows the steps in the project guide. Each module is implemented and verified independently.
 
@@ -42,3 +43,23 @@ On Windows, ChromaDB is stored at
 `C:\Users\<username>\.industry-academia-agent\vector_db`. This user-home location
 avoids Chinese-path limitations and Microsoft Store per-app `LOCALAPPDATA`
 virtualization. The project `data\vector_db` entry may be a Junction to that path.
+
+## Extract research capabilities
+
+Preview the locally selected evidence without calling Moonshot:
+
+```powershell
+python src/extraction/capability_extractor.py
+```
+
+After reviewing and approving the displayed data scope, run the extraction with:
+
+```powershell
+python src/extraction/capability_extractor.py --send-to-moonshot
+```
+
+Each paper is saved as a UTF-8 JSON file under `data/processed/capabilities`.
+Required capability fields remain separate from `evidence_map`; every non-empty
+claim must reference a real source label, and `sources` retains the original Chunk
+text, Chunk ID, and page range. This output directory is intentionally ignored by
+Git because the records contain excerpts from the source papers.

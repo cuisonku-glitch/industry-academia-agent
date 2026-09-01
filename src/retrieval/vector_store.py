@@ -86,10 +86,46 @@ class PaperVectorStore:
         """Return the number of stored chunks."""
         return self.collection.count()
 
+    def get_chunks(
+        self, where: dict[str, Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Return stored chunks, optionally filtered by metadata."""
+        get_options: dict[str, Any] = {"include": ["documents", "metadatas"]}
+        if where:
+            get_options["where"] = where
+        raw_results = self.collection.get(**get_options)
+        chunks = [
+            {"chunk_id": chunk_id, "text": document, "metadata": metadata}
+            for chunk_id, document, metadata in zip(
+                raw_results["ids"],
+                raw_results["documents"],
+                raw_results["metadatas"],
+            )
+            if document is not None and metadata is not None
+        ]
+        return sorted(chunks, key=lambda chunk: chunk["chunk_id"])
+
+    def list_papers(self) -> list[dict[str, Any]]:
+        """Return one deterministic metadata record for each indexed paper."""
+        papers_by_file: dict[str, dict[str, Any]] = {}
+        for chunk in self.get_chunks():
+            metadata = chunk["metadata"]
+            file_name = str(metadata.get("file_name", "")).strip()
+            if file_name and file_name not in papers_by_file:
+                papers_by_file[file_name] = {
+                    "file_name": file_name,
+                    "title": metadata.get("title", Path(file_name).stem),
+                    "author": metadata.get("author", ""),
+                    "teacher": metadata.get("teacher", ""),
+                    "year": metadata.get("year"),
+                }
+        return [papers_by_file[name] for name in sorted(papers_by_file)]
+
     def query(
         self,
         query_embedding: Sequence[float],
         top_k: int = 3,
+        where: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         """Return the nearest chunks ranked by cosine similarity."""
         if top_k <= 0:
@@ -97,10 +133,15 @@ class PaperVectorStore:
         if self.count() == 0:
             return []
 
+        query_options: dict[str, Any] = {
+            "query_embeddings": [query_embedding],
+            "n_results": min(top_k, self.count()),
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if where:
+            query_options["where"] = where
         raw_results = self.collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(top_k, self.count()),
-            include=["documents", "metadatas", "distances"],
+            **query_options,
         )
         ids = raw_results["ids"][0]
         documents = raw_results["documents"][0]
