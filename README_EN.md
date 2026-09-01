@@ -136,6 +136,7 @@ docs/                 Installation, acceptance, and release notes
 
 - `v0.1.0`: first runnable local MVP.
 - `v0.1.1`: bilingual documentation, MIT license, portable Windows setup/launchers, and synthetic sample data.
+- `v0.1.2`: layout-aware PDF parsing, section-aware chunks, SQLite paper catalog, versioned vector collection, and retrieval evaluation.
 
 ## License
 
