@@ -13,6 +13,7 @@ A minimal industry–academia matching Agent built from a small collection of gr
 - Grounded RAG with `kimi-k3` verified against the Moonshot China API
 - Traceable capability extraction verified for all three indexed papers
 - Deterministic teacher research profile verified from three paper records
+- Evidence-grounded enterprise need parsing verified with the guide example
 
 Development follows the steps in the project guide. Each module is implemented and verified independently.
 
@@ -81,3 +82,22 @@ representative paper, application domain, and potential industry fields. Its
 `evidence_map` links every aggregated value back to a paper, original stage-6
 claim, Chunk ID, and page range. Generated profiles remain local and are ignored
 by Git.
+
+## Parse enterprise needs
+
+Run the guide's industrial X-ray inspection example locally:
+
+```powershell
+python src/extraction/enterprise_parser.py
+```
+
+For another requirement, pass the original product-language description:
+
+```powershell
+python src/extraction/enterprise_parser.py --text "我们开发工业 X 射线探伤设备，希望寻找低成本、高灵敏度的探测材料。"
+```
+
+The parser separates industry, product, technical problems, required research
+capabilities, constraints, and keywords. Every non-empty derived field retains
+the exact phrase that triggered it in `evidence_map`. Generated enterprise need
+profiles remain local and are ignored by Git.
