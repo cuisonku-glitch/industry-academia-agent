@@ -61,6 +61,7 @@ class CapabilityExtractionTests(unittest.TestCase):
         self.assertIn("[S01]", prompt)
         self.assertIn("paper_chunk_0001", prompt)
         self.assertIn("页码：12-12", prompt)
+        self.assertIn("每个数组最多保留 4 项", prompt)
 
     def test_validate_requires_real_source_labels(self) -> None:
         payload = self._valid_payload()
@@ -134,6 +135,7 @@ class CapabilityExtractionTests(unittest.TestCase):
         self.assertEqual(
             recorder.kwargs["extra_body"], {"thinking": {"type": "disabled"}}
         )
+        self.assertEqual(recorder.kwargs["max_tokens"], 5000)
 
 
 if __name__ == "__main__":

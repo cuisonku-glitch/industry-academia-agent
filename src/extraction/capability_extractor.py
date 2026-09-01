@@ -347,6 +347,8 @@ def build_extraction_prompt(
             "4. evidence_map.claim 必须逐字复制对应字段中的完整结论。",
             "5. source_labels 只能使用下方实际存在的 S 编号。",
             "6. 没有直接证据的内容留空，不得根据常识推断。",
+            "7. 每个数组最多保留 4 项，每项不超过 50 个汉字并避免重复表述。",
+            "8. 每条 evidence_map 最多引用 2 个最直接的 source_labels。",
             "",
             "JSON 模板：",
             json.dumps(schema, ensure_ascii=False, indent=2),
@@ -386,10 +388,12 @@ class CapabilityExtractor:
                 {"role": "user", "content": prompt},
             ],
             response_format={"type": "json_object"},
-            max_tokens=3000,
+            max_tokens=5000,
             extra_body={"thinking": {"type": "disabled"}},
         )
         choice = response.choices[0]
+        if choice.finish_reason == "length":
+            raise RuntimeError("Kimi JSON 达到输出上限而被截断，请缩短抽取结果")
         content = choice.message.content
         if not content or not content.strip():
             raise RuntimeError(f"Kimi 返回了空 JSON（finish_reason={choice.finish_reason}）")
