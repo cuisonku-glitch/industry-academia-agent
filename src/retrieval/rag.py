@@ -25,6 +25,9 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_QUESTION = "这些论文有哪些共同研究方向？"
 DEFAULT_TOP_K = 5
+TEACHER_OVERVIEW_PATTERN = re.compile(
+    r"(?:老师|导师|团队).{0,12}(?:研究什么|做什么|研究方向|主要研究|科研方向)"
+)
 
 SYSTEM_PROMPT = """你是严谨的产学研论文问答助手。
 你只能依据用户消息中提供的“检索资料”回答，不能使用资料之外的事实补全答案。
@@ -135,6 +138,58 @@ def validate_citations(answer: str, source_count: int) -> None:
         raise RuntimeError(f"Kimi 返回了不存在的资料编号：{invalid_text}")
 
 
+def is_teacher_overview_question(question: str) -> bool:
+    """Detect broad questions that require evidence coverage across papers."""
+    return bool(TEACHER_OVERVIEW_PATTERN.search(question.strip()))
+
+
+def build_overview_retrieval_query(
+    question: str, papers: Sequence[dict[str, Any]]
+) -> str:
+    """Expand a vague teacher question with local, non-generative metadata."""
+    teachers = sorted(
+        {
+            str(paper.get("teacher", "")).strip()
+            for paper in papers
+            if str(paper.get("teacher", "")).strip()
+        }
+    )
+    titles = [
+        str(paper.get("title", "")).strip()
+        for paper in papers
+        if str(paper.get("title", "")).strip()
+    ]
+    return " ".join(
+        [
+            question.strip(),
+            "检索重点：研究方向、核心技术、实验方法、材料体系、器件与应用。",
+            f"教师：{'、'.join(teachers)}。" if teachers else "",
+            f"论文主题：{'；'.join(titles)}" if titles else "",
+        ]
+    ).strip()
+
+
+def merge_diverse_retrievals(
+    per_paper: Sequence[dict[str, Any]],
+    global_results: Sequence[dict[str, Any]],
+    top_k: int,
+) -> list[dict[str, Any]]:
+    """Keep one result per paper first, then fill remaining places globally."""
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in [*per_paper, *global_results]:
+        chunk_id = str(item["chunk_id"])
+        if chunk_id not in seen:
+            seen.add(chunk_id)
+            selected.append(dict(item))
+        if len(selected) == top_k:
+            break
+    selected.sort(key=lambda item: (-float(item["similarity"]), item["chunk_id"]))
+    for rank, item in enumerate(selected, start=1):
+        item["rank"] = rank
+    return selected
+
+
 class RAGPipeline:
     """Retrieve local evidence and ask Kimi to write a grounded answer."""
 
@@ -159,8 +214,24 @@ class RAGPipeline:
         """Retrieve the most relevant local paper chunks for a question."""
         if self.vector_store.count() == 0:
             raise RuntimeError("向量数据库为空，请先运行 vector_store.py 建库")
-        query_embedding = self.embedder.embed_queries([question])[0]
-        return self.vector_store.query(query_embedding, top_k=top_k)
+        if not is_teacher_overview_question(question):
+            query_embedding = self.embedder.embed_queries([question])[0]
+            return self.vector_store.query(query_embedding, top_k=top_k)
+
+        papers = self.vector_store.list_papers()
+        retrieval_query = build_overview_retrieval_query(question, papers)
+        query_embedding = self.embedder.embed_queries([retrieval_query])[0]
+        per_paper: list[dict[str, Any]] = []
+        for paper in papers[:top_k]:
+            result = self.vector_store.query(
+                query_embedding,
+                top_k=1,
+                where={"file_name": paper["file_name"]},
+            )
+            if result:
+                per_paper.append(result[0])
+        global_results = self.vector_store.query(query_embedding, top_k=top_k)
+        return merge_diverse_retrievals(per_paper, global_results, top_k)
 
     def answer(self, question: str, top_k: int = DEFAULT_TOP_K) -> dict[str, Any]:
         """Retrieve evidence, call Kimi once, and return answer plus sources."""

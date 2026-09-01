@@ -43,6 +43,10 @@ The demo embeds the question locally on the GPU, retrieves the top five ChromaDB
 chunks, sends only those chunks to Kimi, and prints a grounded answer followed by
 deterministic paper and page references. Kimi thinking mode is disabled for this
 short evidence-based task so the output-token budget is reserved for the answer.
+Broad questions such as “这个老师研究什么？” are expanded only with local teacher
+and paper-title metadata, then retrieve at least one best Chunk from every indexed
+paper before the remaining Top-K positions are filled globally. This prevents one
+paper from dominating a teacher-overview answer.
 
 On Windows, ChromaDB is stored at
 `C:\Users\<username>\.industry-academia-agent\vector_db`. This user-home location
