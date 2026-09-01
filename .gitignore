@@ -26,6 +26,7 @@ data/vector_db/
 data/processed/capabilities/
 data/processed/teacher_profiles/
 data/processed/enterprise_needs/
+data/processed/matches/
 
 # Downloaded local AI models
 .cache/

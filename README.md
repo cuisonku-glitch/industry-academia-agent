@@ -14,6 +14,7 @@ A minimal industry–academia matching Agent built from a small collection of gr
 - Traceable capability extraction verified for all three indexed papers
 - Deterministic teacher research profile verified from three paper records
 - Evidence-grounded enterprise need parsing verified with the guide example
+- Transparent hybrid research-industry matching verified with local paper evidence
 
 Development follows the steps in the project guide. Each module is implemented and verified independently.
 
@@ -101,3 +102,22 @@ The parser separates industry, product, technical problems, required research
 capabilities, constraints, and keywords. Every non-empty derived field retains
 the exact phrase that triggered it in `evidence_map`. Generated enterprise need
 profiles remain local and are ignored by Git.
+
+## Match enterprise needs to teacher research
+
+After stages 5-8 have produced the vector database, teacher profile, and enterprise
+need profile, run:
+
+```powershell
+python src/matching/matcher.py
+```
+
+The stage-9 score is deterministic and reproducible: overall semantic similarity
+contributes 45%, required-capability coverage 25%, application-domain matching
+15%, and relevant paper-evidence count 15%. The output exposes every raw value,
+weight, and point contribution instead of asking an LLM for a subjective score.
+It also includes the recommended teacher, core matching technologies, relevant
+papers, Chunk/page evidence, matching reasons, technology gaps, and potential
+collaboration directions. This stage uses only the local BGE model and ChromaDB;
+it does not call Moonshot. Generated matching results remain local and are ignored
+by Git.
