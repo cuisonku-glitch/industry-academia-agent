@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README_EN.md)
 
-An evidence-grounded industry–academia transfer prototype. It parses papers locally, builds a vector database and traceable teacher research profiles, decomposes original enterprise requests into confirmable technical modules, and produces evidence-gated solution packages, technical routes, transfer assessments, and phased landing plans. The Streamlit interface provides an enterprise solution workbench and paper Q&A with page-level citations.
+An evidence-grounded industry–academia transfer prototype. It parses papers locally, builds a vector database and traceable teacher research profiles, decomposes original enterprise requests into confirmable technical modules, and produces evidence-gated solution packages, technical routes, transfer assessments, and phased landing plans. The Streamlit interface provides an enterprise solution workbench, an academy paper-library and tag-review workbench, and paper Q&A with page-level citations.
 
 > Data notice: this public repository does not include real papers, teacher profiles, non-public enterprise requests, vector databases, or API keys. `examples/` contains fully synthetic installation fixtures plus a sourced public challenge summary explicitly labeled as not being a client engagement.
 
@@ -16,6 +16,10 @@ An evidence-grounded industry–academia transfer prototype. It parses papers lo
 - Dense, BM25, and RRF retrieval under one direction/section/numeric filter contract, with an optional CrossEncoder reranker
 - Independent runs per retrieval method with P50/P95 latency, peak GPU memory, and same-qrels evaluation results
 - Traceable research-capability extraction and teacher profiling
+- Recursive registration of thousands of local PDFs with SHA-256 deduplication and unchanged-file caching
+- Fuzzy search by teacher, author, title, or tag with SQLite-backed pagination
+- Multi-layer paper tag suggestions with provenance, confidence, and human review status
+- Academy-side upload, metadata correction, tag confirmation/rejection, and Markdown catalog preview
 - Structured parsing of requirements, target metrics, test conditions, existing foundations, and excluded approaches
 - Field-by-field correction in the web app, with immutable local JSON snapshots and history restore
 - GPU retrieval only after the user confirms a saved version, with unknowns preserved as clarification items
@@ -56,9 +60,15 @@ See the [product design and development roadmap (Chinese)](docs/PRODUCT_ROADMAP.
 
 ## Use your own data
 
-1. Put PDFs that you are authorized to process in `data/raw/papers/`.
-2. Add filename, author, teacher, year, and direction metadata to `config/paper_metadata.seed.json`. After the first sync, the local SQLite catalog is the runtime source of truth.
-3. Sync the catalog and build the versioned local vector database:
+1. Put a small set of papers to parse under `data/raw/papers/`. An existing large library can live in a sibling `论文/teacher/*.pdf` directory or be configured with `INDUSTRY_AGENT_PAPER_LIBRARY_DIR`.
+2. Register the recursive library and create reviewable tag suggestions. This reads file headers and hashes only; it does not parse full text or call an external API:
+
+```powershell
+python scripts/sync_paper_library.py --papers-dir "D:\your-paper-library"
+```
+
+3. Open “Academy · Research outputs” in the web app to search papers, correct metadata, and confirm or reject suggested tags. Rules live in `config/paper_tag_taxonomy.json`; automatic results are never confirmed by default.
+4. For papers selected for full RAG ingestion, add author, teacher, year, and direction metadata to `config/paper_metadata.seed.json`, then sync the parsed catalog and build the versioned vector database:
 
 ```powershell
 conda activate industry_agent
@@ -66,14 +76,14 @@ python scripts/sync_paper_catalog.py
 python src/retrieval/vector_store.py
 ```
 
-4. Preview and save traceable metric records locally. This step does not call Moonshot:
+5. Preview and save traceable metric records locally. This step does not call Moonshot:
 
 ```powershell
 python src/extraction/metric_extractor.py --preview-only
 python src/extraction/metric_extractor.py
 ```
 
-5. Capability extraction sends selected paper excerpts to the Moonshot endpoint configured in `.env`. Preview first, then explicitly approve the API run:
+6. Capability extraction sends selected paper excerpts to the Moonshot endpoint configured in `.env`. Preview first, then explicitly approve the API run:
 
 ```powershell
 python src/extraction/capability_extractor.py
@@ -81,8 +91,8 @@ python src/extraction/capability_extractor.py --send-to-moonshot
 python src/extraction/teacher_profiler.py
 ```
 
-6. Start the web app and enter the enterprise's original wording, or load the sourced public Jiangxi Cable acceptance case.
-7. Complete the enterprise flow: system parse → field-by-field edit → save a version → confirm the saved version → generate the solution. Unsaved UI edits are never sent downstream.
+7. Start the web app and enter the enterprise's original wording, or load the sourced public Jiangxi Cable acceptance case.
+8. Complete the enterprise flow: system parse → field-by-field edit → save a version → confirm the saved version → generate the solution. Unsaved UI edits are never sent downstream.
 
 ## Moonshot/Kimi configuration
 
@@ -94,6 +104,8 @@ When `.env` is missing, the installer creates it from `.env.example`:
 MOONSHOT_API_KEY=
 MOONSHOT_BASE_URL=https://api.moonshot.cn/v1
 MOONSHOT_MODEL=kimi-k3
+INDUSTRY_AGENT_PAPER_LIBRARY_DIR=
+INDUSTRY_AGENT_CATALOG_PATH=
 ```
 
 Never commit `.env`. The web app sends at most five locally retrieved paper chunks only after the user checks the consent box. The API key is never rendered in the page.
@@ -119,6 +131,9 @@ python src/retrieval/rag.py
 
 # Start Streamlit manually
 python -m streamlit run app/app.py
+
+# Register a recursive paper library and create reviewable tags (local only)
+python scripts/sync_paper_library.py --papers-dir "D:\your-paper-library"
 ```
 
 ## Data and privacy boundary
@@ -141,7 +156,8 @@ examples/             Synthetic fixtures and traceable public challenge summarie
 scripts/              Windows setup, launch, and sample bootstrap logic
 src/ingestion/        PDF parsing and chunking
 src/retrieval/        Embeddings, ChromaDB, and RAG
-src/repository/       SQLite paper catalog and vector-index contract
+src/repository/       SQLite paper catalog, tags, and vector-index contract
+src/library/          Local discovery, deduplication, upload, and tag suggestions
 src/evaluation/       Offline retrieval quality metrics
 src/extraction/       Capability, teacher, and enterprise parsing
 src/matching/         Transparent weighted matching

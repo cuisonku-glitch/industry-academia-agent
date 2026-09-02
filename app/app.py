@@ -30,6 +30,7 @@ from enterprise_editor import (
     metric_editor_rows,
     multiline,
 )
+from academy_page import render_academy_page
 from src.agents.coordinator import build_coordinator
 from src.extraction.enterprise_parser import parse_enterprise_need
 from src.extraction.enterprise_profile_editor import (
@@ -59,7 +60,7 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .block-container {max-width: 1180px; padding-top: 2rem; padding-bottom: 4rem;}
+    .block-container {max-width: 1540px; padding-top: 2rem; padding-bottom: 4rem;}
     [data-testid="stMetric"] {border: 1px solid #d9e2ec; border-radius: 12px; padding: 14px;}
     [data-testid="stSidebar"] {border-right: 1px solid #e7edf3;}
     </style>
@@ -137,6 +138,25 @@ with st.sidebar:
     st.markdown("**本地数据集**")
     st.caption("论文、教师画像和向量数据库只保存在当前电脑，不包含在公开仓库中。")
     st.info("企业匹配完全本地运行；论文问答需要调用 Moonshot API。")
+
+workspace = st.segmented_control(
+    "选择工作台",
+    ["企业端 · 组合方案", "院校端 · 成果对接", "谱系版图"],
+    default="企业端 · 组合方案",
+    required=True,
+    key="workspace_selector",
+    label_visibility="collapsed",
+    width="stretch",
+)
+
+if workspace == "院校端 · 成果对接":
+    render_academy_page()
+    st.stop()
+
+if workspace == "谱系版图":
+    st.title("谱系版图")
+    st.info("先完成论文标签审核与证据关系，再生成可解释的论文关系子图。")
+    st.stop()
 
 st.title("产学研合作智能分析")
 st.caption("先确认需求拆解，再生成有论文证据的技术方案、路线与落地计划。")

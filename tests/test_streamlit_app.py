@@ -11,6 +11,7 @@ from typing import Any
 from streamlit.testing.v1 import AppTest
 
 from src.extraction.enterprise_parser import parse_enterprise_need
+from src.repository import PaperCatalog
 from src.solutions import build_enterprise_solution, route_to_drawio
 
 
@@ -94,11 +95,19 @@ def make_display_state() -> dict[str, Any]:
 class StreamlitAppTests(unittest.TestCase):
     def setUp(self) -> None:
         self.version_directory = tempfile.TemporaryDirectory()
+        self.academy_directory = tempfile.TemporaryDirectory()
         os.environ["INDUSTRY_AGENT_VERSION_DIR"] = self.version_directory.name
+        os.environ["INDUSTRY_AGENT_CATALOG_PATH"] = str(
+            Path(self.academy_directory.name) / "papers.sqlite3"
+        )
+        os.environ["INDUSTRY_AGENT_PAPER_LIBRARY_DIR"] = self.academy_directory.name
 
     def tearDown(self) -> None:
         os.environ.pop("INDUSTRY_AGENT_VERSION_DIR", None)
+        os.environ.pop("INDUSTRY_AGENT_CATALOG_PATH", None)
+        os.environ.pop("INDUSTRY_AGENT_PAPER_LIBRARY_DIR", None)
         self.version_directory.cleanup()
+        self.academy_directory.cleanup()
 
     def _app(self) -> AppTest:
         app = AppTest.from_file(str(APP_PATH), default_timeout=20)
@@ -122,6 +131,26 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn("载入江西电缆公开验收案例", button_labels)
         self.assertIn("解析需求", button_labels)
         self.assertIn("查询论文", button_labels)
+
+    def test_academy_workbench_opens_without_loading_models(self) -> None:
+        paper = Path(self.academy_directory.name) / "paper.pdf"
+        paper.write_bytes(b"%PDF-1.4 academy catalog fixture")
+        PaperCatalog(Path(os.environ["INDUSTRY_AGENT_CATALOG_PATH"])).register_pdf(
+            paper,
+            title="可检索院校论文",
+            teacher="导师甲",
+            ingestion_status="metadata_pending",
+        )
+        app = self._app()
+        app.segmented_control[0].select("院校端 · 成果对接").run()
+
+        self.assertEqual(len(app.exception), 0)
+        self.assertIn("院校端 · 论文成果工作台", [item.value for item in app.title])
+        self.assertIn(
+            "搜索导师、作者、题名或标签",
+            [item.label for item in app.text_input],
+        )
+        self.assertIn("1", [item.value for item in app.metric])
 
     def test_empty_enterprise_request_is_rejected_before_model_loading(self) -> None:
         app = self._app()

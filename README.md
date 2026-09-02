@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README_EN.md)
 
-一个以论文证据为基础的产学研转化原型：在本地解析论文、建立向量数据库和教师科研画像，再将企业原始需求拆成可确认的技术模块，形成有论文页码证据的组合方案、技术路线、转化评估和分阶段落地计划。Streamlit 网页同时提供企业方案工作台和带页码引用的论文问答。
+一个以论文证据为基础的产学研转化原型：在本地解析论文、建立向量数据库和教师科研画像，再将企业原始需求拆成可确认的技术模块，形成有论文页码证据的组合方案、技术路线、转化评估和分阶段落地计划。Streamlit 网页同时提供企业方案工作台、院校论文库与标签审核工作台，以及带页码引用的论文问答。
 
 > 数据说明：公开仓库不包含真实论文、教师画像、非公开企业需求、向量数据库或 API Key。`examples/` 包含完全合成的安装样例，以及带来源、明确标注为“非委托”的公开榜单需求摘要。
 
@@ -16,6 +16,10 @@
 - 使用同一方向/章节/数值过滤契约运行 Dense、BM25、RRF，并可选接入 CrossEncoder 重排
 - 为每种检索方法保存独立 run、P50/P95 延迟、峰值显存及同 qrels 评测结果
 - 从论文证据生成可回溯的科研能力与教师画像
+- 递归登记数千篇本地 PDF，以 SHA-256 去重并缓存未变化文件
+- 按导师、作者、题名和标签模糊搜索，SQLite 分页返回结果
+- 为每篇论文生成多层标签草稿，记录来源、置信度和人工审核状态
+- 在院校端上传/选择论文、补录元数据、确认或驳回标签、预览 Markdown 目录报告
 - 将企业原始需求解析为结构化需求、量化指标、测试条件、已有基础和排除路线
 - 在网页中逐项修改解析结果，按不可覆盖的 JSON 快照保存、恢复本地历史版本
 - 只有用户确认已保存版本后才进入重型检索，未知项继续保留为待澄清
@@ -56,9 +60,15 @@ CPU 电脑可以从终端运行：
 
 ## 使用自己的数据
 
-1. 将有权处理的论文 PDF 放入 `data/raw/papers/`。
-2. 在 `config/paper_metadata.seed.json` 中填写文件名、作者、导师、年份和方向；首次同步后，本地 SQLite 目录数据库是运行时数据源。
-3. 同步目录并建立当前解析版本的本地向量数据库：
+1. 少量待解析论文可放入 `data/raw/papers/`；已有的大型论文库也可放在项目同级的 `论文/导师名/*.pdf`，或通过 `INDUSTRY_AGENT_PAPER_LIBRARY_DIR` 指定。
+2. 先递归登记大型论文库并生成待审核标签；这个步骤只读取文件头与哈希，不解析全文、不调用外部 API：
+
+```powershell
+python scripts/sync_paper_library.py --papers-dir "D:\你的论文目录"
+```
+
+3. 打开网页顶部的“院校端 · 成果对接”，可以搜索论文、补充基础信息并确认/驳回自动标签。标签规则位于 `config/paper_tag_taxonomy.json`，自动结果默认均为“待确认”。
+4. 对准备进入全文 RAG 的论文，在 `config/paper_metadata.seed.json` 中补充作者、导师、年份和方向，然后同步解析目录并建立当前解析版本的本地向量数据库：
 
 ```powershell
 conda activate industry_agent
@@ -66,14 +76,14 @@ python scripts/sync_paper_catalog.py
 python src/retrieval/vector_store.py
 ```
 
-4. 在本地预览并生成可追溯指标记录；该步骤不调用 Moonshot：
+5. 在本地预览并生成可追溯指标记录；该步骤不调用 Moonshot：
 
 ```powershell
 python src/extraction/metric_extractor.py --preview-only
 python src/extraction/metric_extractor.py
 ```
 
-5. 能力抽取会把选中的论文片段发送到 `.env` 配置的 Moonshot 接口。先预览，确认范围后再明确执行发送：
+6. 能力抽取会把选中的论文片段发送到 `.env` 配置的 Moonshot 接口。先预览，确认范围后再明确执行发送：
 
 ```powershell
 python src/extraction/capability_extractor.py
@@ -81,8 +91,8 @@ python src/extraction/capability_extractor.py --send-to-moonshot
 python src/extraction/teacher_profiler.py
 ```
 
-6. 双击网页启动脚本，输入企业真实需求；也可以先载入带公开来源的“江西电缆”验收案例。
-7. 按“系统解析 → 逐项修改 → 保存版本 → 确认已保存版本 → 生成方案”完成企业端流程。未保存的页面修改不会进入方案生成。
+7. 双击网页启动脚本，输入企业真实需求；也可以先载入带公开来源的“江西电缆”验收案例。
+8. 按“系统解析 → 逐项修改 → 保存版本 → 确认已保存版本 → 生成方案”完成企业端流程。未保存的页面修改不会进入方案生成。
 
 ## Moonshot/Kimi 配置
 
@@ -94,6 +104,8 @@ python src/extraction/teacher_profiler.py
 MOONSHOT_API_KEY=
 MOONSHOT_BASE_URL=https://api.moonshot.cn/v1
 MOONSHOT_MODEL=kimi-k3
+INDUSTRY_AGENT_PAPER_LIBRARY_DIR=
+INDUSTRY_AGENT_CATALOG_PATH=
 ```
 
 填写 API Key 后不要提交 `.env`。网页只有在用户勾选同意后，才会发送本地检索出的最多五个论文片段；API Key 不会显示在页面中。
@@ -119,6 +131,9 @@ python src/retrieval/rag.py
 
 # 手动启动网页
 python -m streamlit run app/app.py
+
+# 递归登记大型论文库并生成待审核标签（纯本地）
+python scripts/sync_paper_library.py --papers-dir "D:\你的论文目录"
 ```
 
 ## 数据与隐私边界
@@ -141,7 +156,8 @@ examples/             合成安装样例与可追溯的公开榜单需求摘要
 scripts/              Windows 安装、启动和示例初始化逻辑
 src/ingestion/        PDF 解析与 Chunk 切分
 src/retrieval/        Embedding、ChromaDB 和 RAG
-src/repository/       SQLite 论文目录与向量索引接口
+src/repository/       SQLite 论文目录、标签与向量索引接口
+src/library/          本地论文发现、去重、上传和标签建议
 src/evaluation/       离线检索质量指标
 src/extraction/       科研能力、教师画像和企业需求解析
 src/matching/         透明加权匹配
