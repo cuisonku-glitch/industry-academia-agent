@@ -10,6 +10,18 @@
 {"query_id":"q001","query":"希望探测器在低剂量下仍保持高灵敏度，哪些论文有直接实验依据？"}
 ```
 
+可选 `filters` 在所有检索方法运行前使用同一套候选过滤规则：
+
+```json
+{"query_id":"q002","query":"哪些结果满足灵敏度门槛？","filters":{"direction":"x_ray_detector","section_types":["results","discussion"],"metrics":[{"definition_id":"sensitivity","operator":"gte","value":1000,"unit":"μC Gyair^-1 cm^-2"}]}}
+```
+
+- `direction` 使用 `config/research_direction_taxonomy.json` 中的方向 ID；
+- `section_types` 使用章节感知切块的封闭类型；
+- `metrics` 支持 `eq/gte/lte/between`，输入值先按指标本体归一；
+- 数值硬筛默认只接受 `measured/reported`，不会把 `inferred` 当成已达到的硬指标；
+- 多个指标约束按 AND 处理，区间必须整体满足门槛，不能只取有利端点。
+
 人工相关性标注 `qrels.jsonl` 每行对应一个 query/chunk 判断：
 
 ```json
@@ -29,11 +41,27 @@
 ## 运行
 
 ```powershell
-python scripts/run_retrieval_eval.py --queries data/evaluation/queries.jsonl --output data/evaluation/dense-section-v2.jsonl
+python scripts/run_retrieval_eval.py `
+  --queries data/evaluation/queries.jsonl `
+  --qrels data/evaluation/qrels.jsonl `
+  --output-dir data/evaluation/runs/experiment-001 `
+  --methods dense bm25 rrf
+
 python scripts/evaluate_retrieval.py --qrels data/evaluation/qrels.jsonl --run data/evaluation/dense-section-v2.jsonl
 ```
 
-输出包括宏平均 `Recall@K`、`MRR@K` 和 `nDCG@K`，并保留逐问题结果。
+每个方法保存独立 JSONL；`manifest.json` 记录查询文件哈希、集合版本、过滤数量、P50/P95 延迟和峰值 GPU 显存。提供 `--qrels` 时，每个方法还保存独立指标 JSON，并在同一份 qrels 上计算宏平均 `Recall@K`、`MRR@K` 和 `nDCG@K`。
+
+可选 CrossEncoder 不随仓库下载；先自行选择并缓存有权使用的模型，再显式运行：
+
+```powershell
+python scripts/run_retrieval_eval.py `
+  --queries data/evaluation/queries.jsonl `
+  --qrels data/evaluation/qrels.jsonl `
+  --output-dir data/evaluation/runs/experiment-rerank `
+  --methods rerank `
+  --reranker-model "你的 CrossEncoder 模型名或本地路径"
+```
 
 ## 标注规则
 

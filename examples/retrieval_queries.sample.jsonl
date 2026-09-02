@@ -1,0 +1,2 @@
+{"query_id":"sample-q001","query":"低剂量X射线探测器如何获得高灵敏度和低检测限？","filters":{"direction":"x_ray_detector","section_types":["experiment","results","discussion"]}}
+{"query_id":"sample-q002","query":"哪些证据显示X射线探测灵敏度达到1000 μC Gyair^-1 cm^-2以上？","filters":{"direction":"x_ray_detector","metrics":[{"definition_id":"sensitivity","operator":"gte","value":1000,"unit":"μC Gyair^-1 cm^-2"}]}}
