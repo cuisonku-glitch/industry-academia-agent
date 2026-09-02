@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
@@ -90,11 +92,23 @@ def make_display_state() -> dict[str, Any]:
 
 
 class StreamlitAppTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.version_directory = tempfile.TemporaryDirectory()
+        os.environ["INDUSTRY_AGENT_VERSION_DIR"] = self.version_directory.name
+
+    def tearDown(self) -> None:
+        os.environ.pop("INDUSTRY_AGENT_VERSION_DIR", None)
+        self.version_directory.cleanup()
+
     def _app(self) -> AppTest:
         app = AppTest.from_file(str(APP_PATH), default_timeout=20)
         app.run()
         self.assertEqual(len(app.exception), 0)
         return app
+
+    @staticmethod
+    def _button(app: AppTest, label: str):
+        return next(button for button in app.button if button.label == label)
 
     def test_page_has_both_required_workflows(self) -> None:
         app = self._app()
@@ -104,11 +118,14 @@ class StreamlitAppTests(unittest.TestCase):
         )
         self.assertEqual(app.text_area[0].label, "企业需求原话")
         self.assertEqual(app.text_input[0].label, "问")
-        self.assertEqual([button.label for button in app.button], ["解析需求", "查询论文"])
+        button_labels = [button.label for button in app.button]
+        self.assertIn("载入江西电缆公开验收案例", button_labels)
+        self.assertIn("解析需求", button_labels)
+        self.assertIn("查询论文", button_labels)
 
     def test_empty_enterprise_request_is_rejected_before_model_loading(self) -> None:
         app = self._app()
-        app.button[0].click().run()
+        self._button(app, "解析需求").click().run()
         self.assertIn("请先输入企业需求原话", app.error[0].value)
         self.assertEqual(len(app.exception), 0)
 
@@ -117,18 +134,44 @@ class StreamlitAppTests(unittest.TestCase):
         app.text_area[0].input(
             "我们开发工业X射线探伤设备，需要高灵敏度探测，已有小型样机。"
         )
-        app.button[0].click().run()
+        self._button(app, "解析需求").click().run()
         self.assertEqual(len(app.exception), 0)
         self.assertIn(
             "核对结构化拆解",
             "\n".join(item.value for item in app.markdown),
         )
-        self.assertIn("确认需求并生成组合方案", [item.label for item in app.button])
+        button_labels = [item.label for item in app.button]
+        self.assertIn("保存当前修改为新版本", button_labels)
+        self.assertIn("确认版本并生成组合方案", button_labels)
+        confirm_button = self._button(app, "确认版本并生成组合方案")
+        self.assertTrue(confirm_button.disabled)
+
+    def test_public_case_can_be_loaded_without_model_loading(self) -> None:
+        app = self._app()
+        self._button(app, "载入江西电缆公开验收案例").click().run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertIn("江西电缆有限责任公司", app.text_area[0].value)
+        self.assertIn(
+            "不代表本项目获得了该企业委托",
+            "\n".join(item.value for item in app.info),
+        )
+
+    def test_parsed_requirement_must_be_saved_before_confirmation(self) -> None:
+        app = self._app()
+        app.text_area[0].input(
+            "我们开发工业X射线探伤设备，需要高灵敏度探测，已有小型样机。"
+        )
+        self._button(app, "解析需求").click().run()
+        self._button(app, "保存当前修改为新版本").click().run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertTrue(list(Path(self.version_directory.name).glob("ENV-*.json")))
+        self.assertIn("待确认版本", "\n".join(item.value for item in app.success))
+        self.assertTrue(self._button(app, "确认版本并生成组合方案").disabled)
 
     def test_paper_question_requires_explicit_data_consent(self) -> None:
         app = self._app()
         app.text_input[0].input("这个老师主要做什么？")
-        app.button[1].click().run()
+        self._button(app, "查询论文").click().run()
         self.assertIn("请先确认论文片段发送范围", app.error[0].value)
         self.assertEqual(len(app.exception), 0)
 

@@ -20,6 +20,13 @@ DEFAULT_REQUEST = """我们开发工业 X 射线探伤设备，
 最好可以进行大面积制备。"""
 
 INDUSTRY_RULES: dict[str, tuple[str, ...]] = {
+    "先进装备制造": (
+        "先进装备制造",
+        "线缆制造",
+        "电缆生产",
+        "线缆在线测控",
+        "超高压线缆",
+    ),
     "工业检测": ("工业", "探伤", "无损检测", "缺陷检测"),
     "医疗影像": ("医学成像", "医疗影像", "医疗设备", "放射诊断"),
     "公共安全": ("安检", "安全检查", "公共安全"),
@@ -27,6 +34,8 @@ INDUSTRY_RULES: dict[str, tuple[str, ...]] = {
 }
 
 PRODUCT_TERMS = (
+    "超高压线缆在线测控系统",
+    "超高压电缆在线测控系统",
     "X射线探伤设备",
     "X 射线探伤设备",
     "X射线成像设备",
@@ -44,6 +53,14 @@ TECHNICAL_PROBLEM_RULES: dict[str, tuple[str, ...]] = {
     "大面积制备能力不足": ("难以大面积", "无法大面积", "面积受限"),
     "器件稳定性不足": ("稳定性不足", "容易衰减", "基线漂移", "寿命短"),
     "成像分辨率不足": ("分辨率不足", "分辨率低", "图像模糊"),
+    "线缆同心度在线测量能力不足": (
+        "同心度测量能力不足",
+        "缺少同心度在线测量",
+    ),
+    "表面缺陷在线识别能力不足": (
+        "表面缺陷识别能力不足",
+        "缺少表面缺陷在线检测",
+    ),
 }
 
 CAPABILITY_RULES: dict[str, tuple[str, ...]] = {
@@ -55,6 +72,9 @@ CAPABILITY_RULES: dict[str, tuple[str, ...]] = {
     "高稳定性探测器": ("高稳定性", "长期稳定", "降低基线漂移"),
     "柔性或曲面成像": ("柔性", "曲面成像", "可穿戴"),
     "快速响应探测": ("快速响应", "实时成像", "高速探测"),
+    "超高压线缆在线同心度测量": ("同心度测量", "在线同心度控制"),
+    "线缆表面缺陷智能检测": ("表面缺陷智能检测", "表面瑕疵检测", "缺陷识别"),
+    "多传感器冗余监测与误差校正": ("冗余监测", "误差校正", "多电极阵列"),
 }
 
 PREFERENCE_RULES: dict[str, tuple[str, ...]] = {
@@ -88,8 +108,19 @@ PROFILE_LIST_FIELDS = (
     "excluded_approaches",
     "keywords",
 )
+CONFIRMATION_STATUSES = frozenset(
+    {"system_parsed", "draft_user_edited", "confirmed_by_user"}
+)
+PROVENANCE_TYPES = frozenset({"enterprise_original", "enterprise_user_edit"})
 
 TARGET_METRIC_NAMES = (
+    "最小可检测缺陷尺寸",
+    "缺陷识别精度",
+    "检测可靠性",
+    "检测频率",
+    "检测精度",
+    "检测速度",
+    "X射线能量",
     "灵敏度",
     "检测限",
     "分辨率",
@@ -148,11 +179,17 @@ def _append_evidence(
     field: str,
     value: str,
     phrases: Iterable[str],
+    source_type: str = "enterprise_original",
 ) -> None:
     unique_phrases = list(dict.fromkeys(phrase for phrase in phrases if phrase))
     if unique_phrases:
         evidence_map.append(
-            {"field": field, "value": value, "matched_phrases": unique_phrases}
+            {
+                "field": field,
+                "value": value,
+                "matched_phrases": unique_phrases,
+                "source_type": source_type,
+            }
         )
 
 
@@ -254,7 +291,7 @@ def _detect_target_metrics(
         rf"(?P<name>{metric_names})"
         rf"(?P<context>[^，。；;\n]{{0,16}}?)"
         rf"(?P<operator>{operators})\s*"
-        rf"(?P<value>\d+(?:\.\d+)?(?:\s*[×xX]\s*10\s*(?:\^\s*)?[-−]?\d+)?)"
+        rf"(?P<value>[±+-]?\s*\d+(?:\.\d+)?(?:\s*[×xX]\s*10\s*(?:\^\s*)?[-−]?\d+)?)"
         rf"\s*(?P<unit>[^，。；;\n]{{0,24}})"
     )
     test_conditions = [
@@ -283,6 +320,7 @@ def _detect_target_metrics(
             "test_condition": "；".join(test_conditions),
             "raw_text": raw_text,
             "source_type": "enterprise_confirmed",
+            "provenance_type": "enterprise_original",
         }
         metrics.append(metric)
         _append_evidence(
@@ -314,6 +352,23 @@ def validate_enterprise_profile(profile: dict[str, Any]) -> None:
     original_request = profile.get("original_request")
     if not isinstance(original_request, str) or not original_request.strip():
         raise RuntimeError("企业画像缺少 original_request")
+    confirmed_request = profile.get("confirmed_request", original_request)
+    if not isinstance(confirmed_request, str) or not confirmed_request.strip():
+        raise RuntimeError("企业画像缺少 confirmed_request")
+    confirmation = profile.get("confirmation")
+    if not isinstance(confirmation, dict) or not confirmation.get("status"):
+        raise RuntimeError("企业画像缺少 confirmation 状态")
+    if confirmation["status"] not in CONFIRMATION_STATUSES:
+        raise RuntimeError("企业画像 confirmation 状态不受支持")
+    if confirmation.get("version_id") is not None and not isinstance(
+        confirmation["version_id"], str
+    ):
+        raise RuntimeError("企业画像 confirmation.version_id 格式无效")
+    if confirmation["status"] == "confirmed_by_user" and not all(
+        isinstance(confirmation.get(field), str) and confirmation[field]
+        for field in ("version_id", "confirmed_at")
+    ):
+        raise RuntimeError("用户确认画像缺少版本或确认时间")
     for field in ("industry", "product"):
         if not isinstance(profile.get(field), str) or not profile[field]:
             raise RuntimeError(f"企业画像字段 {field} 必须是非空字符串")
@@ -339,7 +394,15 @@ def validate_enterprise_profile(profile: dict[str, Any]) -> None:
             raise RuntimeError("企业画像 target_metrics 字段不完整")
         if metric["source_type"] != "enterprise_confirmed":
             raise RuntimeError("企业目标指标必须标记为 enterprise_confirmed")
-        if metric["raw_text"].casefold() not in original_request.casefold():
+        metric_source = metric.get("provenance_type", "enterprise_original")
+        if metric_source not in PROVENANCE_TYPES:
+            raise RuntimeError("企业目标指标包含未知证据来源类型")
+        source_text = (
+            original_request
+            if metric_source == "enterprise_original"
+            else confirmed_request
+        )
+        if metric["raw_text"].casefold() not in source_text.casefold():
             raise RuntimeError("企业目标指标缺少原文依据")
     unparsed = profile.get("unparsed_fragments")
     if not isinstance(unparsed, list) or any(
@@ -374,7 +437,15 @@ def validate_enterprise_profile(profile: dict[str, Any]) -> None:
         phrases = item.get("matched_phrases")
         if not isinstance(phrases, list) or not phrases:
             raise RuntimeError(f"企业需求字段缺少原文证据：{item.get('value')}")
-        if any(phrase.casefold() not in original_request.casefold() for phrase in phrases):
+        source_type = item.get("source_type", "enterprise_original")
+        if source_type not in PROVENANCE_TYPES:
+            raise RuntimeError("企业需求包含未知证据来源类型")
+        source_text = (
+            original_request
+            if source_type == "enterprise_original"
+            else confirmed_request
+        )
+        if any(phrase.casefold() not in source_text.casefold() for phrase in phrases):
             raise RuntimeError(f"企业需求引用了不存在的原文短语：{item.get('value')}")
 
 
@@ -418,10 +489,16 @@ def parse_enterprise_need(text: str) -> dict[str, Any]:
             normalized, "keywords", KEYWORD_RULES, evidence_map
         ),
         "original_request": normalized,
+        "confirmed_request": normalized,
         "evidence_map": evidence_map,
         "unparsed_fragments": _find_unparsed_fragments(normalized, evidence_map),
         "parsed_at": datetime.now(timezone.utc).isoformat(),
         "parser": "deterministic_product_to_research_v2",
+        "confirmation": {
+            "status": "system_parsed",
+            "version_id": None,
+            "confirmed_at": None,
+        },
     }
     validate_enterprise_profile(profile)
     return profile

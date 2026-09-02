@@ -108,7 +108,7 @@ class EvidenceAgent:
         solution_bundle = state.get("solution_bundle")
         if not solution_bundle:
             raise RuntimeError("Evidence Agent 缺少企业方案")
-        validate_solution_bundle(solution_bundle, state["request_text"])
+        validate_solution_bundle(solution_bundle, state["enterprise_need"])
 
         reviews: list[dict[str, Any]] = []
         for recommendation in result["recommendations"]:

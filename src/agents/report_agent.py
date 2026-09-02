@@ -24,7 +24,11 @@ class ReportAgent:
         if not result or not review or not bundle:
             raise RuntimeError("Report Agent 缺少匹配结果、企业方案或证据审查")
 
-        mode_label = "指南示例演示" if state["input_mode"] == "demo" else "用户输入"
+        mode_label = {
+            "demo": "指南示例演示",
+            "public_case": "公开榜单验收案例",
+            "user_file": "用户文件",
+        }.get(state["input_mode"], "用户输入")
         lines = [
             "# 产学研匹配报告",
             "",
@@ -34,12 +38,32 @@ class ReportAgent:
             "",
             state["request_text"],
             "",
-            "## 需求确认与待澄清项",
-            "",
-            "- 需求确认状态："
-            + bundle["requirement_confirmation"]["status"],
-            f"- 阻塞型问题：{bundle['clarification']['blocking_count']} 项",
         ]
+        profile = state["enterprise_need"]
+        if profile.get("confirmed_request") != state["request_text"]:
+            lines.extend(
+                [
+                    "## 用户确认后的需求快照",
+                    "",
+                    profile["confirmed_request"],
+                    "",
+                    "> 原始企业文本保留不变；本节是用户逐项编辑并确认后用于方案生成的版本。",
+                    "",
+                ]
+            )
+        lines.extend(
+            [
+                "## 需求确认与待澄清项",
+                "",
+                "- 需求确认状态："
+                + bundle["requirement_confirmation"]["status"],
+                "- 需求版本："
+                + str(
+                    profile.get("confirmation", {}).get("version_id") or "未保存"
+                ),
+                f"- 阻塞型问题：{bundle['clarification']['blocking_count']} 项",
+            ]
+        )
         questions = bundle["clarification"]["questions"]
         lines.extend(
             [

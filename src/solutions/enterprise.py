@@ -22,6 +22,13 @@ CAPABILITY_PROBLEM_HINTS: dict[str, tuple[str, ...]] = {
 }
 
 METRIC_CAPABILITY_HINTS: dict[str, tuple[str, ...]] = {
+    "X射线能量": ("X射线", "探测", "成像"),
+    "检测精度": ("同心度", "测量", "检测"),
+    "检测频率": ("在线", "快速", "检测"),
+    "检测可靠性": ("稳定", "冗余", "检测"),
+    "缺陷识别精度": ("缺陷", "智能检测"),
+    "最小可检测缺陷尺寸": ("缺陷", "智能检测"),
+    "检测速度": ("在线", "快速", "智能检测"),
     "灵敏度": ("灵敏度", "探测"),
     "检测限": ("检测限", "探测"),
     "分辨率": ("分辨率", "成像"),
@@ -764,7 +771,7 @@ def build_enterprise_solution(
         "landing_plan": _build_landing_plan(route, transfer),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
-    validate_solution_bundle(bundle, profile["original_request"])
+    validate_solution_bundle(bundle, profile)
     return bundle
 
 
@@ -791,8 +798,17 @@ def _assert_acyclic(route: dict[str, Any]) -> None:
         raise RuntimeError("技术路线存在循环依赖")
 
 
-def validate_solution_bundle(bundle: dict[str, Any], original_request: str) -> None:
+def validate_solution_bundle(
+    bundle: dict[str, Any], enterprise_profile: dict[str, Any] | str
+) -> None:
     """Reject untraceable modules, malformed evidence, and score denominator errors."""
+    if isinstance(enterprise_profile, dict):
+        request_evidence_text = enterprise_profile.get(
+            "confirmed_request",
+            enterprise_profile.get("original_request", ""),
+        )
+    else:
+        request_evidence_text = enterprise_profile
     if bundle.get("schema_version") != SCHEMA_VERSION:
         raise RuntimeError("企业方案 schema_version 不受支持")
     modules = bundle.get("need_modules")
@@ -807,7 +823,7 @@ def validate_solution_bundle(bundle: dict[str, Any], original_request: str) -> N
         if not module.get("source_phrases"):
             raise RuntimeError(f"技术模块缺少企业原文：{module.get('module_id')}")
         if any(
-            phrase.casefold() not in original_request.casefold()
+            phrase.casefold() not in request_evidence_text.casefold()
             for phrase in module["source_phrases"]
         ):
             raise RuntimeError("技术模块引用了不存在的企业原文")

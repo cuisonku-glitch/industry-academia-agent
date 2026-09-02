@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {
+      "case_id": "jiangxi_cable_2025_public",
+      "title": "超高压线缆制造过程关键指标在线测控技术及系统",
+      "organization": "江西电缆有限责任公司",
+      "source_type": "public_government_list_summary",
+      "source_url": "http://stc.jian.gov.cn/news-show-3015.html",
+      "source_mirror_url": "https://www.nuochi.net/index.php?a=show&c=index&catid=79&id=1283&m=content",
+      "published_at": "2025-10-28",
+      "accessed_at": "2026-09-02",
+      "notice": "这是根据公开榜单整理的验收摘要，不代表本项目获得了该企业委托。",
+      "request_text": "公开榜单案例：江西电缆有限责任公司拟研发超高压线缆在线测控系统。系统需要采用高能X射线源和高分辨率探测器阵列，对超高压电缆绝缘结构进行在线同心度测量，并利用图像处理和边缘提取识别导体与绝缘层边界；同时融合多电极阵列电容检测、冗余监测和误差校正。X射线能量至少100 keV，X射线能量不超过200 keV；检测精度不超过±0.02 mm，检测频率高于5 Hz，检测可靠性高于98%。系统还需要进行线缆表面缺陷智能检测，识别划痕、凹陷、鼓包和微裂纹；缺陷识别精度至少98%，最小可检测缺陷尺寸不超过0.05 mm，检测速度至少10 m/min。榜单金额为500万元，并要求形成在线监测反馈系统以及相应知识产权和产业化成果。"
+    }
+  ]
+}

@@ -21,6 +21,10 @@ from src.agents.workflow import (
 )
 from src.agents.coordinator import build_coordinator
 from src.extraction.enterprise_parser import parse_enterprise_need
+from src.extraction.enterprise_profile_editor import (
+    apply_enterprise_edits,
+    confirm_enterprise_profile,
+)
 from src.solutions import build_enterprise_solution
 
 
@@ -224,6 +228,53 @@ class AgentWorkflowTests(unittest.TestCase):
             requirement_confirmed=True,
         )
         self.assertIn("输入类型：指南示例演示", state["report"])
+
+    def test_confirmed_edited_profile_is_used_downstream(self) -> None:
+        request = "我们开发工业X射线探伤设备，需要高灵敏度探测。"
+        original = parse_enterprise_need(request)
+        edited = apply_enterprise_edits(
+            original,
+            {
+                "industry": "工业在线检测",
+                "product": "产线X射线质量检测系统",
+                "technical_problems": original["technical_problems"],
+                "required_capabilities": [
+                    *original["required_capabilities"],
+                    "产线联机闭环",
+                ],
+                "constraints": ["单线改造预算不超过80万元"],
+                "existing_foundations": [],
+                "excluded_approaches": [],
+                "keywords": original["keywords"],
+                "target_metrics": [],
+                "unparsed_fragments": [],
+            },
+        )
+        confirmed = confirm_enterprise_profile(
+            edited,
+            version_id="ENV-20260902T000000000000Z-12345678",
+        )
+
+        state = self._coordinator(FakeMatcher()).run(
+            request,
+            input_mode="user",
+            requirement_confirmed=True,
+            enterprise_profile=confirmed,
+        )
+
+        self.assertEqual(state["enterprise_need"]["product"], "产线X射线质量检测系统")
+        self.assertEqual(state["enterprise_need"]["original_request"], request)
+        self.assertIn("用户确认后的需求快照", state["report"])
+        self.assertIn("单线改造预算不超过80万元", state["report"])
+
+    def test_edited_profile_must_match_current_original_request(self) -> None:
+        profile = parse_enterprise_need("需求原文 A。")
+        with self.assertRaisesRegex(ValueError, "original_request"):
+            self._coordinator(FakeMatcher()).run(
+                "需求原文 B。",
+                requirement_confirmed=True,
+                enterprise_profile=profile,
+            )
 
     def test_evidence_agent_rejects_tampered_teacher_source(self) -> None:
         result = make_match_result()

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any, Callable
 
-from ..extraction.enterprise_parser import parse_enterprise_need
+from ..extraction.enterprise_parser import (
+    parse_enterprise_need,
+    validate_enterprise_profile,
+)
 from ..matching.matcher import (
     DEFAULT_TEACHER_DIRECTORY,
     DEFAULT_TOP_K,
@@ -33,7 +37,12 @@ class RequirementAgent:
         self.parser = parser
 
     def run(self, state: dict[str, Any]) -> None:
-        profile = self.parser(state["request_text"])
+        existing = state.get("enterprise_need")
+        if existing:
+            validate_enterprise_profile(existing)
+            profile = copy.deepcopy(existing)
+        else:
+            profile = self.parser(state["request_text"])
         state["enterprise_need"] = profile
         record_trace(
             state,

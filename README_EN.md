@@ -4,7 +4,7 @@
 
 An evidence-grounded industry–academia transfer prototype. It parses papers locally, builds a vector database and traceable teacher research profiles, decomposes original enterprise requests into confirmable technical modules, and produces evidence-gated solution packages, technical routes, transfer assessments, and phased landing plans. The Streamlit interface provides an enterprise solution workbench and paper Q&A with page-level citations.
 
-> Data notice: this public repository does not include real papers, teacher profiles, enterprise requests, vector databases, or API keys. Everything under `examples/` is fully synthetic and exists only to validate installation and demonstrate the workflow.
+> Data notice: this public repository does not include real papers, teacher profiles, non-public enterprise requests, vector databases, or API keys. `examples/` contains fully synthetic installation fixtures plus a sourced public challenge summary explicitly labeled as not being a client engagement.
 
 ## Features
 
@@ -13,7 +13,8 @@ An evidence-grounded industry–academia transfer prototype. It parses papers lo
 - ChromaDB persistence and evidence retrieval
 - Traceable research-capability extraction and teacher profiling
 - Structured parsing of requirements, target metrics, test conditions, existing foundations, and excluded approaches
-- A lightweight requirement-confirmation gate before GPU retrieval, with unknowns preserved as clarification items
+- Field-by-field correction in the web app, with immutable local JSON snapshots and history restore
+- GPU retrieval only after the user confirms a saved version, with unknowns preserved as clarification items
 - Module-level paper and teacher retrieval without inventing extra solution alternatives
 - Technical routes with dependencies, suggested ownership, acceptance/exit criteria, and phased landing plans
 - A four-dimension known-only transfer assessment with evidence completeness and five hard gates
@@ -69,7 +70,8 @@ python src/extraction/capability_extractor.py --send-to-moonshot
 python src/extraction/teacher_profiler.py
 ```
 
-5. Start the web app, enter the enterprise's original wording, review the structured decomposition, then explicitly confirm it before generating a solution.
+5. Start the web app and enter the enterprise's original wording, or load the sourced public Jiangxi Cable acceptance case.
+6. Complete the enterprise flow: system parse → field-by-field edit → save a version → confirm the saved version → generate the solution. Unsaved UI edits are never sent downstream.
 
 ## Moonshot/Kimi configuration
 
@@ -117,7 +119,7 @@ Always run a secret scan before publishing and confirm that you have permission 
 
 ```text
 app/                  Streamlit web interface
-examples/             Fully synthetic public sample data
+examples/             Synthetic fixtures and traceable public challenge summaries
 scripts/              Windows setup, launch, and sample bootstrap logic
 src/ingestion/        PDF parsing and chunking
 src/retrieval/        Embeddings, ChromaDB, and RAG
@@ -137,7 +139,7 @@ docs/                 Installation, acceptance, and release notes
 - The current PDF pipeline focuses on text and does not yet interpret figures, complex tables, or scanned-page OCR.
 - Engineering maturity, cost, IP, regulatory, and safety dimensions remain unknown until supporting investigation is available.
 - The enterprise workflow emits only as many evidence-supported solutions as it can justify; it does not pad the result to three alternatives.
-- The synthetic dataset validates software behavior only; it is not a real research result or recommendation.
+- The Jiangxi Cable case is a summary of a public open-challenge notice used to test software behavior. It is not a client engagement and is not a human gold-standard endorsement of any matched teacher or proposed solution.
 - This release is a local prototype without user accounts, multi-tenant storage, or public hosting.
 
 ## Versions
@@ -145,7 +147,7 @@ docs/                 Installation, acceptance, and release notes
 - `v0.1.0`: first runnable local MVP.
 - `v0.1.1`: bilingual documentation, MIT license, portable Windows setup/launchers, and synthetic sample data.
 - `v0.1.2`: layout-aware PDF parsing, section-aware chunks, SQLite paper catalog, versioned vector collection, and retrieval evaluation.
-- `master` development checkpoint: the first P1 enterprise loop with requirement confirmation, module retrieval, solution/route/assessment, and landing-report output.
+- `master` development checkpoint: the P1 enterprise loop with parsing, field-level editing, immutable local versions, confirmation freeze, module retrieval, and solution/route/assessment/landing-report output.
 
 ## License
 

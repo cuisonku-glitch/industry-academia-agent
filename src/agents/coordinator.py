@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ from ..matching.matcher import (
     DEFAULT_TOP_K,
     ResearchIndustryMatcher,
 )
+from ..extraction.enterprise_parser import validate_enterprise_profile
 from .decision_agents import EvidenceAgent, MatchingAgent, SolutionAgent
 from .report_agent import ReportAgent
 from .source_agents import (
@@ -63,12 +65,18 @@ class Coordinator:
         input_mode: str = "user",
         *,
         requirement_confirmed: bool = False,
+        enterprise_profile: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         state = new_state(
             request_text,
             input_mode,
             requirement_confirmed=requirement_confirmed,
         )
+        if enterprise_profile is not None:
+            validate_enterprise_profile(enterprise_profile)
+            if enterprise_profile["original_request"] != request_text.strip():
+                raise ValueError("已编辑画像的 original_request 与当前需求原文不一致")
+            state["enterprise_need"] = copy.deepcopy(enterprise_profile)
         for agent in self.agents:
             try:
                 agent.run(state)
