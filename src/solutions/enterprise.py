@@ -803,12 +803,16 @@ def validate_solution_bundle(
 ) -> None:
     """Reject untraceable modules, malformed evidence, and score denominator errors."""
     if isinstance(enterprise_profile, dict):
-        request_evidence_text = enterprise_profile.get(
-            "confirmed_request",
-            enterprise_profile.get("original_request", ""),
+        request_evidence_texts = tuple(
+            text
+            for text in (
+                enterprise_profile.get("original_request", ""),
+                enterprise_profile.get("confirmed_request", ""),
+            )
+            if text
         )
     else:
-        request_evidence_text = enterprise_profile
+        request_evidence_texts = (enterprise_profile,)
     if bundle.get("schema_version") != SCHEMA_VERSION:
         raise RuntimeError("企业方案 schema_version 不受支持")
     modules = bundle.get("need_modules")
@@ -823,7 +827,10 @@ def validate_solution_bundle(
         if not module.get("source_phrases"):
             raise RuntimeError(f"技术模块缺少企业原文：{module.get('module_id')}")
         if any(
-            phrase.casefold() not in request_evidence_text.casefold()
+            not any(
+                phrase.casefold() in evidence_text.casefold()
+                for evidence_text in request_evidence_texts
+            )
             for phrase in module["source_phrases"]
         ):
             raise RuntimeError("技术模块引用了不存在的企业原文")

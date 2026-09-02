@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import copy
+import json
 import unittest
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
 from src.extraction.enterprise_parser import DEFAULT_REQUEST, parse_enterprise_need
+from src.extraction.enterprise_profile_editor import apply_enterprise_edits
 from src.solutions import (
     build_clarification,
     build_enterprise_solution,
@@ -141,6 +144,44 @@ class EnterpriseSolutionTests(unittest.TestCase):
         tampered["need_modules"][0]["source_phrases"] = ["企业从未说过这句话"]
         with self.assertRaisesRegex(RuntimeError, "不存在的企业原文"):
             validate_solution_bundle(tampered, profile["original_request"])
+
+    def test_public_case_module_can_reference_original_phrase_after_edit_save(self) -> None:
+        case_path = (
+            Path(__file__).resolve().parents[1]
+            / "examples"
+            / "public_enterprise_cases.json"
+        )
+        request = json.loads(case_path.read_text(encoding="utf-8"))["cases"][0][
+            "request_text"
+        ]
+        parsed = parse_enterprise_need(request)
+        edited = apply_enterprise_edits(
+            parsed,
+            {
+                "industry": parsed["industry"],
+                "product": parsed["product"],
+                "technical_problems": parsed["technical_problems"],
+                "required_capabilities": parsed["required_capabilities"],
+                "constraints": parsed["constraints"],
+                "existing_foundations": parsed["existing_foundations"],
+                "excluded_approaches": parsed["excluded_approaches"],
+                "keywords": parsed["keywords"],
+                "target_metrics": parsed["target_metrics"],
+                "unparsed_fragments": parsed["unparsed_fragments"],
+            },
+        )
+        self.assertIn("多电极阵列", edited["original_request"])
+        self.assertNotIn("多电极阵列", edited["confirmed_request"])
+
+        bundle = build_enterprise_solution(
+            edited,
+            make_match_result(),
+            evidence_for_all(edited),
+            confirmed=True,
+        )
+
+        self.assertEqual(bundle["solution_gate"]["status"], "passed")
+        validate_solution_bundle(bundle, edited)
 
     def test_drawio_export_is_native_xml_with_editable_nodes_and_edges(self) -> None:
         profile = parse_enterprise_need(DEFAULT_REQUEST)
