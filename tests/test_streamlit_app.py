@@ -16,6 +16,10 @@ from src.solutions import build_enterprise_solution, route_to_drawio
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app" / "app.py"
+ACADEMY_PATH = (
+    Path(__file__).resolve().parents[1] / "app" / "app_pages" / "academy.py"
+)
+ROUTER_PATH = Path(__file__).resolve().parents[1] / "app" / "streamlit_app.py"
 
 
 def make_display_state() -> dict[str, Any]:
@@ -115,6 +119,12 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         return app
 
+    def _academy_app(self) -> AppTest:
+        app = AppTest.from_file(str(ACADEMY_PATH), default_timeout=20)
+        app.run()
+        self.assertEqual(len(app.exception), 0)
+        return app
+
     @staticmethod
     def _button(app: AppTest, label: str):
         return next(button for button in app.button if button.label == label)
@@ -141,8 +151,7 @@ class StreamlitAppTests(unittest.TestCase):
             teacher="导师甲",
             ingestion_status="metadata_pending",
         )
-        app = self._app()
-        app.segmented_control[0].select("院校端 · 成果对接").run()
+        app = self._academy_app()
 
         self.assertEqual(len(app.exception), 0)
         self.assertIn("院校端 · 论文成果工作台", [item.value for item in app.title])
@@ -151,6 +160,11 @@ class StreamlitAppTests(unittest.TestCase):
             [item.label for item in app.text_input],
         )
         self.assertIn("1", [item.value for item in app.metric])
+
+    def test_native_router_opens_default_enterprise_page(self) -> None:
+        app = AppTest.from_file(str(ROUTER_PATH), default_timeout=20).run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertIn("产学研合作智能分析", [item.value for item in app.title])
 
     def test_empty_enterprise_request_is_rejected_before_model_loading(self) -> None:
         app = self._app()

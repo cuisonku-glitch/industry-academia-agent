@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pymupdf
 
-from src.library import PaperLibraryService
+from src.library import PaperIngestionService, PaperLibraryService
 from src.repository import PaperCatalog, PaperTag
 
 
@@ -108,6 +108,55 @@ class PaperLibraryServiceTests(unittest.TestCase):
                     "fake.pdf",
                     target_directory=root / "uploads",
                 )
+
+    def test_batch_parser_persists_status_and_content_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            paper = root / "X-ray detector.pdf"
+            make_pdf(paper, "X ray detector for industrial testing")
+            catalog = PaperCatalog(root / "catalog.sqlite3")
+            record = catalog.register_pdf(
+                paper,
+                teacher="导师甲",
+                ingestion_status="metadata_pending",
+            )
+            service = PaperIngestionService(
+                catalog,
+                output_directory=root / "parsed",
+            )
+
+            result = service.parse_batch(limit=1)
+
+            self.assertEqual(result.completed, 1)
+            self.assertEqual(result.failed, 0)
+            self.assertTrue((root / "parsed" / f"{record.paper_id}.json.gz").is_file())
+            updated = catalog.get(record.paper_id)
+            self.assertEqual(updated.ingestion_status, "parsed")
+            self.assertEqual(updated.page_count, 1)
+            self.assertIn(
+                "探测器",
+                [tag.value for tag in catalog.list_tags(record.paper_id)],
+            )
+            self.assertEqual(service.parse_batch(limit=1).requested, 0)
+
+    def test_batch_parser_records_failure_for_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            paper = root / "broken.pdf"
+            paper.write_bytes(b"%PDF- broken")
+            catalog = PaperCatalog(root / "catalog.sqlite3")
+            record = catalog.register_pdf(
+                paper,
+                ingestion_status="metadata_pending",
+            )
+            service = PaperIngestionService(catalog, output_directory=root / "parsed")
+
+            result = service.parse_batch(limit=1)
+
+            self.assertEqual(result.failed, 1)
+            updated = catalog.get(record.paper_id)
+            self.assertEqual(updated.ingestion_status, "failed")
+            self.assertTrue(updated.error_message)
 
 
 if __name__ == "__main__":

@@ -176,6 +176,54 @@ class PaperLibraryService:
             added += 1
         return added
 
+    def ensure_content_tags(
+        self,
+        record: PaperRecord,
+        pages: Iterable[dict],
+    ) -> int:
+        """Add reviewable rule tags from parsed pages with page-level provenance."""
+        existing = {tag.tag_id for tag in self.catalog.list_tags(record.paper_id)}
+        added = 0
+        normalized_pages = [
+            (
+                int(page.get("page", index)),
+                str(page.get("text", "")).casefold(),
+            )
+            for index, page in enumerate(pages, start=1)
+        ]
+        seen: set[tuple[str, str]] = set()
+        for rule in self.rules:
+            identity = (rule["category"], rule["value"].casefold())
+            if identity in seen:
+                continue
+            matched_page = 0
+            matched_words: list[str] = []
+            for page_number, text in normalized_pages:
+                matches = [word for word in rule["keywords"] if word in text]
+                if matches:
+                    matched_page = page_number
+                    matched_words = matches
+                    break
+            if not matched_words:
+                continue
+            seen.add(identity)
+            tag = PaperTag(
+                paper_id=record.paper_id,
+                category=rule["category"],
+                value=rule["value"],
+                source="content_rule",
+                confidence=min(0.99, float(rule["confidence"]) + 0.04),
+                review_status="suggested",
+                evidence=(
+                    f"正文第 {matched_page} 页命中：" + "、".join(matched_words)
+                ),
+            )
+            if tag.stable_id() in existing:
+                continue
+            self.catalog.upsert_tag(tag)
+            added += 1
+        return added
+
     def sync_directory(
         self,
         root: Path,

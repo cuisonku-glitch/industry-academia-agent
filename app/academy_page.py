@@ -9,7 +9,11 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.library import DEFAULT_LIBRARY_ROOT, PaperLibraryService
+from src.library import (
+    DEFAULT_LIBRARY_ROOT,
+    PaperIngestionService,
+    PaperLibraryService,
+)
 from src.repository import (
     DEFAULT_CATALOG_PATH,
     INGESTION_STATUSES,
@@ -22,7 +26,7 @@ from src.repository import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-PAGE_SIZE = 30
+TEACHERS_PER_PAGE = 12
 CATEGORY_LABELS = {
     "research_direction": "研究方向",
     "material": "材料",
@@ -36,12 +40,12 @@ CATEGORY_LABELS = {
     "custom": "自定义",
 }
 STATUS_LABELS = {
-    "discovered": "已发现",
-    "metadata_pending": "待补元数据",
-    "parsing": "解析中",
-    "parsed": "已解析",
+    "discovered": "已发现，待登记",
+    "metadata_pending": "已登记，待解析正文",
+    "parsing": "正在解析正文",
+    "parsed": "正文已解析，待建立索引",
     "indexed": "已索引",
-    "failed": "失败",
+    "failed": "解析失败，可重试",
 }
 REVIEW_LABELS = {
     "suggested": "待确认",
@@ -58,6 +62,14 @@ def get_paper_catalog(database_path: str) -> PaperCatalog:
 @st.cache_resource
 def get_library_service(database_path: str) -> PaperLibraryService:
     return PaperLibraryService(get_paper_catalog(database_path))
+
+
+@st.cache_resource
+def get_ingestion_service(database_path: str) -> PaperIngestionService:
+    return PaperIngestionService(
+        get_paper_catalog(database_path),
+        library_service=get_library_service(database_path),
+    )
 
 
 def _catalog_path() -> str:
@@ -189,6 +201,50 @@ def _render_upload_panel(service: PaperLibraryService) -> None:
                     st.rerun()
                 except Exception as exc:
                     st.error(f"上传失败，可修复后重试：{exc}")
+
+
+def _render_parse_panel(service: PaperIngestionService) -> None:
+    with st.popover("解析正文", icon=":material/text_snippet:", width="stretch"):
+        st.caption("纯本地执行。建议先按 10 篇小批次运行，失败论文可单独重试。")
+        batch_size = st.number_input(
+            "本批数量",
+            min_value=1,
+            max_value=20,
+            value=10,
+            step=1,
+            key="academy_parse_batch_size",
+        )
+        retry_failed = st.toggle("同时重试失败论文", key="academy_retry_failed")
+        if st.button("开始解析本批", type="primary", width="stretch"):
+            recovered = service.recover_interrupted()
+            progress_bar = st.progress(0, text="准备解析正文……")
+
+            def update_progress(current: int, total: int, title: str) -> None:
+                progress_bar.progress(
+                    current / total if total else 1.0,
+                    text=f"{current}/{total} · {title}",
+                )
+
+            result = service.parse_batch(
+                limit=int(batch_size),
+                retry_failed=retry_failed,
+                progress=update_progress,
+            )
+            progress_bar.empty()
+            if result.failed:
+                st.warning(
+                    f"完成 {result.completed}，失败 {result.failed}；失败项已记录，可重试。"
+                )
+                for error in result.errors[:5]:
+                    st.caption(error)
+            else:
+                st.success(
+                    f"正文解析完成 {result.completed} 篇，"
+                    f"新增正文标签 {result.content_tags_added} 条。"
+                )
+            if recovered:
+                st.caption(f"本次先恢复了 {recovered} 个中断任务。")
+            st.rerun()
 
 
 def _render_metadata_editor(catalog: PaperCatalog, record: PaperRecord) -> None:
@@ -323,7 +379,7 @@ def _render_analysis_actions(record: PaperRecord) -> None:
         st.caption("任务输出将在后续纵切中接入证据页码、人工审核和报告版本。")
 
 
-def _render_pdf_preview(record: PaperRecord) -> None:
+def _render_pdf_preview(record: PaperRecord, *, height: int = 680) -> None:
     path = Path(record.file_path)
     if not path.is_file():
         st.warning("本地 PDF 路径已失效，请重新同步来源目录。")
@@ -331,12 +387,128 @@ def _render_pdf_preview(record: PaperRecord) -> None:
     if importlib.util.find_spec("streamlit_pdf") is None:
         st.info("PDF 在线预览依赖尚未安装；论文仍保存在本机，目录与标签功能不受影响。")
         return
-    st.pdf(path, height=680, key=f"pdf_{record.paper_id}")
+    st.pdf(path, height=height, key=f"pdf_{record.paper_id}_{height}")
+
+
+def _render_full_preview(catalog: PaperCatalog, record: PaperRecord) -> None:
+    with st.container(horizontal=True, vertical_alignment="center"):
+        if st.button(
+            "返回论文工作台",
+            icon=":material/arrow_back:",
+            type="tertiary",
+        ):
+            st.session_state["academy_fullscreen_preview"] = False
+            st.rerun()
+        st.caption(f"论文 ID：{record.paper_id[:12]}")
+    st.title(record.title)
+    st.caption(
+        f"导师：{record.teacher or '待识别'} · "
+        f"状态：{STATUS_LABELS.get(record.ingestion_status, record.ingestion_status)}"
+    )
+    mode = st.segmented_control(
+        "全页预览内容",
+        ["目录报告", "PDF 原文"],
+        default=st.session_state.get("academy_preview_mode", "目录报告"),
+        required=True,
+        key="academy_full_preview_mode",
+    )
+    if mode == "PDF 原文":
+        _render_pdf_preview(record, height=1050)
+    else:
+        report = _report_markdown(record, catalog.list_tags(record.paper_id))
+        with st.container(border=True):
+            st.markdown(report)
+        st.download_button(
+            "下载 Markdown 目录报告",
+            data=report,
+            file_name=f"paper_{record.paper_id[:12]}_catalog.md",
+            mime="text/markdown",
+            icon=":material/download:",
+        )
+
+
+def _render_teacher_browser(
+    catalog: PaperCatalog,
+    *,
+    query: str,
+    status: str,
+) -> None:
+    total_papers = catalog.count_search(query=query, ingestion_status=status)
+    teacher_count = catalog.count_teacher_facets(
+        query=query,
+        ingestion_status=status,
+    )
+    page_count = max(1, math.ceil(teacher_count / TEACHERS_PER_PAGE))
+    page = st.pagination(
+        page_count,
+        key="academy_teacher_page",
+        max_visible_pages=5,
+        width="stretch",
+    )
+    facets = catalog.teacher_facets(
+        query=query,
+        ingestion_status=status,
+        limit=TEACHERS_PER_PAGE,
+        offset=(page - 1) * TEACHERS_PER_PAGE,
+    )
+    st.caption(
+        f"匹配 {total_papers} 篇 · {teacher_count} 位导师 · "
+        f"当前第 {page}/{page_count} 页"
+    )
+    if not facets:
+        st.info("没有找到匹配论文。")
+        return
+    for facet in facets:
+        teacher = facet["teacher"]
+        teacher_label = teacher or "导师待识别"
+        expander = st.expander(
+            f"{teacher_label} · {facet['paper_count']} 篇",
+            icon=":material/person:",
+            key=f"teacher_{teacher_label}",
+            on_change="rerun",
+        )
+        if not expander.open:
+            continue
+        with expander:
+            if teacher:
+                records = catalog.search(
+                    query=query,
+                    teacher=teacher,
+                    exact_teacher=True,
+                    ingestion_status=status,
+                    limit=500,
+                )
+            else:
+                records = [
+                    record
+                    for record in catalog.search(
+                        query=query,
+                        ingestion_status=status,
+                        limit=500,
+                    )
+                    if not record.teacher
+                ]
+            for record in records:
+                selected = record.paper_id == st.session_state.get(
+                    "academy_selected_paper_id"
+                )
+                if st.button(
+                    record.title,
+                    key=f"select_paper_{record.paper_id}",
+                    type="primary" if selected else "tertiary",
+                    icon=":material/article:",
+                    width="stretch",
+                    wrap=True,
+                ):
+                    st.session_state["academy_selected_paper_id"] = record.paper_id
+                    st.session_state["academy_fullscreen_preview"] = False
+                    st.rerun()
+                st.caption(
+                    STATUS_LABELS.get(record.ingestion_status, record.ingestion_status)
+                )
 
 
 def render_academy_page() -> None:
-    st.title("院校端 · 论文成果工作台")
-    st.caption("本地论文库、可审核标签、精读与成果转化分析的统一入口。")
     database_path = _catalog_path()
     library_root = _library_root()
     try:
@@ -345,6 +517,15 @@ def render_academy_page() -> None:
     except Exception as exc:
         st.error(f"论文目录数据库无法打开：{exc}")
         st.stop()
+
+    selected_id = st.session_state.get("academy_selected_paper_id")
+    selected = catalog.get(selected_id) if selected_id else None
+    if st.session_state.get("academy_fullscreen_preview") and selected is not None:
+        _render_full_preview(catalog, selected)
+        return
+
+    st.title("院校端 · 论文成果工作台")
+    st.caption("按导师浏览论文，系统批量解析正文；你只需复核冲突和低置信度结果。")
 
     metric_columns = st.columns(4)
     metric_columns[0].metric("论文总数", catalog.count())
@@ -355,11 +536,10 @@ def render_academy_page() -> None:
     left, center, right = st.columns([0.32, 0.43, 0.30], gap="medium")
     with left:
         st.subheader("论文来源库")
-        action_columns = st.columns(2)
-        with action_columns[0]:
+        with st.container(horizontal=True):
             _render_sync_panel(service, library_root)
-        with action_columns[1]:
             _render_upload_panel(service)
+            _render_parse_panel(get_ingestion_service(database_path))
         query = st.text_input(
             "搜索导师、作者、题名或标签",
             placeholder="支持模糊搜索",
@@ -371,45 +551,11 @@ def render_academy_page() -> None:
             format_func=lambda value: "全部状态" if not value else STATUS_LABELS[value],
             key="academy_status_filter",
         )
-        total = catalog.count_search(query=query, ingestion_status=status)
-        page_count = max(1, math.ceil(total / PAGE_SIZE))
-        page = st.pagination(
-            page_count,
-            key="academy_page_number",
-            max_visible_pages=5,
-            width="stretch",
+        st.caption(
+            "“已登记，待解析正文”表示系统已经找到 PDF，接下来会自动抽取正文、"
+            "页码和标签；不是要求你手工补齐。"
         )
-        records = catalog.search(
-            query=query,
-            ingestion_status=status,
-            limit=PAGE_SIZE,
-            offset=(page - 1) * PAGE_SIZE,
-        )
-        st.caption(f"匹配 {total} 篇；当前第 {page}/{page_count} 页")
-        table_rows = [
-            {
-                "导师": record.teacher or "待补充",
-                "题名": record.title,
-                "状态": STATUS_LABELS.get(record.ingestion_status, record.ingestion_status),
-            }
-            for record in records
-        ]
-        selection = st.dataframe(
-            table_rows,
-            hide_index=True,
-            width="stretch",
-            height=590,
-            on_select="rerun",
-            selection_mode="single-row",
-            key="academy_paper_table",
-        )
-        if selection.selection.rows:
-            st.session_state["academy_selected_paper_id"] = records[
-                selection.selection.rows[0]
-            ].paper_id
-
-    selected_id = st.session_state.get("academy_selected_paper_id")
-    selected = catalog.get(selected_id) if selected_id else None
+        _render_teacher_browser(catalog, query=query, status=status)
     with center:
         st.subheader("论文工作台")
         if selected is None:
@@ -431,6 +577,13 @@ def render_academy_page() -> None:
             st.info("选择论文后在这里预览标签报告和 PDF 原文。")
         else:
             tags = catalog.list_tags(selected.paper_id)
+            if st.button(
+                "打开全页预览",
+                icon=":material/open_in_full:",
+                width="stretch",
+            ):
+                st.session_state["academy_fullscreen_preview"] = True
+                st.rerun()
             preview_mode = st.segmented_control(
                 "预览内容",
                 ["目录报告", "PDF 原文"],
@@ -438,6 +591,7 @@ def render_academy_page() -> None:
                 required=True,
                 label_visibility="collapsed",
                 width="stretch",
+                key="academy_preview_mode",
             )
             if preview_mode == "PDF 原文":
                 _render_pdf_preview(selected)

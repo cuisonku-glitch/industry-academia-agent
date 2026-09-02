@@ -133,6 +133,33 @@ class PaperCatalogTests(unittest.TestCase):
             self.assertEqual(records[0].page_count, 9)
             self.assertEqual(records[0].pipeline_version, "section_test")
 
+    def test_teacher_facets_group_matching_papers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            catalog = PaperCatalog(root / "catalog.sqlite3")
+            for index, teacher in enumerate(("导师甲", "导师甲", "导师乙")):
+                pdf = root / f"paper-{index}.pdf"
+                pdf.write_bytes(f"%PDF-1.4 fixture {index}".encode())
+                catalog.register_pdf(
+                    pdf,
+                    title=f"论文 {index}",
+                    teacher=teacher,
+                    ingestion_status="metadata_pending",
+                )
+
+            facets = catalog.teacher_facets(ingestion_status="metadata_pending")
+            self.assertEqual(
+                facets,
+                [
+                    {"teacher": "导师甲", "paper_count": 2},
+                    {"teacher": "导师乙", "paper_count": 1},
+                ],
+            )
+            self.assertEqual(catalog.count_teacher_facets(), 2)
+            self.assertEqual(
+                len(catalog.search(teacher="导师甲", exact_teacher=True)), 2
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

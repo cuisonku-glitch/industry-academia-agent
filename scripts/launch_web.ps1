@@ -19,9 +19,9 @@ catch {
     exit 1
 }
 
-$AppPath = Join-Path $ProjectRoot 'app\app.py'
+$AppPath = Join-Path $ProjectRoot 'app\streamlit_app.py'
 if (-not (Test-Path -LiteralPath $AppPath -PathType Leaf)) {
-    Write-Host '[ERROR] app\app.py was not found.' -ForegroundColor Red
+    Write-Host '[ERROR] app\streamlit_app.py was not found.' -ForegroundColor Red
     exit 1
 }
 
