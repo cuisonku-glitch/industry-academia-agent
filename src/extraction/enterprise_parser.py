@@ -84,8 +84,49 @@ PROFILE_LIST_FIELDS = (
     "technical_problems",
     "required_capabilities",
     "constraints",
+    "existing_foundations",
+    "excluded_approaches",
     "keywords",
 )
+
+TARGET_METRIC_NAMES = (
+    "灵敏度",
+    "检测限",
+    "分辨率",
+    "成本",
+    "面积",
+    "尺寸",
+    "厚度",
+    "电压",
+    "功耗",
+    "响应时间",
+    "温度",
+    "良率",
+    "寿命",
+    "稳定性",
+)
+
+METRIC_OPERATOR_MAP = {
+    "不超过": "<=",
+    "低于": "<",
+    "小于": "<",
+    "以内": "<=",
+    "以下": "<=",
+    "至多": "<=",
+    "不低于": ">=",
+    "高于": ">",
+    "大于": ">",
+    "至少": ">=",
+    "以上": ">=",
+    "达到": ">=",
+    "≤": "<=",
+    "<": "<",
+    "≥": ">=",
+    ">": ">",
+}
+
+FOUNDATION_MARKERS = ("已有", "已经具备", "现有", "目前具备", "现有设备", "已有样机")
+EXCLUSION_MARKERS = ("不采用", "不能使用", "不得使用", "排除", "避免使用", "禁止使用")
 
 
 def normalize_request(text: str) -> str:
@@ -179,6 +220,95 @@ def _detect_constraints(text: str, evidence_map: list[dict[str, Any]]) -> list[s
     return constraints
 
 
+def _split_clauses(text: str) -> list[str]:
+    return [
+        clause.strip(" ，。；;\n")
+        for clause in re.split(r"[，。；;\n]+", text)
+        if clause.strip(" ，。；;\n")
+    ]
+
+
+def _detect_marked_clauses(
+    text: str,
+    field: str,
+    markers: Iterable[str],
+    evidence_map: list[dict[str, Any]],
+) -> list[str]:
+    values: list[str] = []
+    for clause in _split_clauses(text):
+        if any(marker.casefold() in clause.casefold() for marker in markers):
+            values.append(clause)
+            _append_evidence(evidence_map, field, clause, [clause])
+    return list(dict.fromkeys(values))
+
+
+def _detect_target_metrics(
+    text: str, evidence_map: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Extract explicit numeric targets without inventing units or test conditions."""
+    metric_names = "|".join(map(re.escape, TARGET_METRIC_NAMES))
+    operators = "|".join(
+        map(re.escape, sorted(METRIC_OPERATOR_MAP, key=len, reverse=True))
+    )
+    pattern = re.compile(
+        rf"(?P<name>{metric_names})"
+        rf"(?P<context>[^，。；;\n]{{0,16}}?)"
+        rf"(?P<operator>{operators})\s*"
+        rf"(?P<value>\d+(?:\.\d+)?(?:\s*[×xX]\s*10\s*(?:\^\s*)?[-−]?\d+)?)"
+        rf"\s*(?P<unit>[^，。；;\n]{{0,24}})"
+    )
+    test_conditions = [
+        match.group(0).strip()
+        for match in re.finditer(r"在[^，。；;\n]{1,40}(?:下|条件下)(?:测试|测量)?", text)
+    ]
+    metrics: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, match in enumerate(pattern.finditer(text), start=1):
+        raw_text = match.group(0).strip()
+        unit = match.group("unit").strip()
+        # A trailing action phrase is not a unit. Keep the original text, but leave
+        # the normalized unit empty instead of pretending to understand it.
+        if re.search(r"(?:测试|测量|验证|实现|制备)$", unit):
+            unit = ""
+        identity = "".join(raw_text.casefold().split())
+        if identity in seen:
+            continue
+        seen.add(identity)
+        metric = {
+            "metric_id": f"TM{index:02d}",
+            "name": match.group("name"),
+            "operator": METRIC_OPERATOR_MAP[match.group("operator")],
+            "value_text": match.group("value").replace("−", "-"),
+            "unit": unit,
+            "test_condition": "；".join(test_conditions),
+            "raw_text": raw_text,
+            "source_type": "enterprise_confirmed",
+        }
+        metrics.append(metric)
+        _append_evidence(
+            evidence_map,
+            "target_metrics",
+            raw_text,
+            [raw_text, *test_conditions],
+        )
+    return metrics
+
+
+def _find_unparsed_fragments(
+    text: str, evidence_map: list[dict[str, Any]]
+) -> list[str]:
+    matched_phrases = [
+        str(phrase).casefold()
+        for item in evidence_map
+        for phrase in item.get("matched_phrases", [])
+    ]
+    return [
+        clause
+        for clause in _split_clauses(text)
+        if not any(phrase in clause.casefold() for phrase in matched_phrases)
+    ]
+
+
 def validate_enterprise_profile(profile: dict[str, Any]) -> None:
     """Require all parsed values to be grounded in original request phrases."""
     original_request = profile.get("original_request")
@@ -191,6 +321,31 @@ def validate_enterprise_profile(profile: dict[str, Any]) -> None:
         value = profile.get(field)
         if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
             raise RuntimeError(f"企业画像字段 {field} 必须是字符串数组")
+    target_metrics = profile.get("target_metrics")
+    if not isinstance(target_metrics, list):
+        raise RuntimeError("企业画像 target_metrics 必须是数组")
+    required_metric_fields = {
+        "metric_id",
+        "name",
+        "operator",
+        "value_text",
+        "unit",
+        "test_condition",
+        "raw_text",
+        "source_type",
+    }
+    for metric in target_metrics:
+        if not isinstance(metric, dict) or not required_metric_fields.issubset(metric):
+            raise RuntimeError("企业画像 target_metrics 字段不完整")
+        if metric["source_type"] != "enterprise_confirmed":
+            raise RuntimeError("企业目标指标必须标记为 enterprise_confirmed")
+        if metric["raw_text"].casefold() not in original_request.casefold():
+            raise RuntimeError("企业目标指标缺少原文依据")
+    unparsed = profile.get("unparsed_fragments")
+    if not isinstance(unparsed, list) or any(
+        not isinstance(item, str) for item in unparsed
+    ):
+        raise RuntimeError("企业画像 unparsed_fragments 必须是字符串数组")
 
     expected = {
         (field, profile[field])
@@ -201,6 +356,9 @@ def validate_enterprise_profile(profile: dict[str, Any]) -> None:
         (field, value)
         for field in PROFILE_LIST_FIELDS
         for value in profile[field]
+    )
+    expected.update(
+        ("target_metrics", metric["raw_text"]) for metric in target_metrics
     )
     evidence_map = profile.get("evidence_map")
     if not isinstance(evidence_map, list):
@@ -224,6 +382,19 @@ def parse_enterprise_need(text: str) -> dict[str, Any]:
     """Build a deterministic enterprise need profile from product language."""
     normalized = normalize_request(text)
     evidence_map: list[dict[str, Any]] = []
+    target_metrics = _detect_target_metrics(normalized, evidence_map)
+    existing_foundations = _detect_marked_clauses(
+        normalized,
+        "existing_foundations",
+        FOUNDATION_MARKERS,
+        evidence_map,
+    )
+    excluded_approaches = _detect_marked_clauses(
+        normalized,
+        "excluded_approaches",
+        EXCLUSION_MARKERS,
+        evidence_map,
+    )
     profile = {
         "industry": _detect_industry(normalized, evidence_map),
         "product": _detect_product(normalized, evidence_map),
@@ -240,13 +411,17 @@ def parse_enterprise_need(text: str) -> dict[str, Any]:
             evidence_map,
         ),
         "constraints": _detect_constraints(normalized, evidence_map),
+        "target_metrics": target_metrics,
+        "existing_foundations": existing_foundations,
+        "excluded_approaches": excluded_approaches,
         "keywords": _match_list_rules(
             normalized, "keywords", KEYWORD_RULES, evidence_map
         ),
         "original_request": normalized,
         "evidence_map": evidence_map,
+        "unparsed_fragments": _find_unparsed_fragments(normalized, evidence_map),
         "parsed_at": datetime.now(timezone.utc).isoformat(),
-        "parser": "deterministic_product_to_research_v1",
+        "parser": "deterministic_product_to_research_v2",
     }
     validate_enterprise_profile(profile)
     return profile

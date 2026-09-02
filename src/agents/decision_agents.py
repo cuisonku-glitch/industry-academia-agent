@@ -9,6 +9,11 @@ from ..matching.matcher import (
     ResearchIndustryMatcher,
     validate_match_result,
 )
+from ..solutions import (
+    build_enterprise_solution,
+    route_to_drawio,
+    validate_solution_bundle,
+)
 from .state import record_trace
 
 
@@ -49,6 +54,38 @@ class MatchingAgent:
         )
 
 
+class SolutionAgent:
+    """Build one evidence-gated solution, route, evaluation, and landing plan."""
+
+    name = "Solution Agent"
+
+    def run(self, state: dict[str, Any]) -> None:
+        profile = state.get("enterprise_need")
+        match_result = state.get("match_result")
+        if not profile or not match_result:
+            raise RuntimeError("Solution Agent 缺少企业画像或匹配结果")
+        bundle = build_enterprise_solution(
+            profile,
+            match_result,
+            state.get("module_evidence", {}),
+            confirmed=bool(state["requirement_confirmation"]["confirmed"]),
+        )
+        state["solution_bundle"] = bundle
+        state["clarification"] = bundle["clarification"]
+        state["need_modules"] = bundle["need_modules"]
+        state["route_drawio"] = route_to_drawio(bundle["technical_route"])
+        record_trace(
+            state,
+            self.name,
+            {
+                "solution_gate": bundle["solution_gate"]["status"],
+                "solution_count": len(bundle["solution_options"]),
+                "route_node_count": len(bundle["technical_route"]["nodes"]),
+                "transfer_decision": bundle["transfer_evaluation"]["decision"],
+            },
+        )
+
+
 def _profile_sources_exist(match: dict[str, Any]) -> bool:
     mappings = match.get("profile_evidence", [])
     return bool(mappings) and all(
@@ -68,6 +105,10 @@ class EvidenceAgent:
         if not result:
             raise RuntimeError("Evidence Agent 缺少匹配结果")
         validate_match_result(result)
+        solution_bundle = state.get("solution_bundle")
+        if not solution_bundle:
+            raise RuntimeError("Evidence Agent 缺少企业方案")
+        validate_solution_bundle(solution_bundle, state["request_text"])
 
         reviews: list[dict[str, Any]] = []
         for recommendation in result["recommendations"]:
@@ -102,6 +143,7 @@ class EvidenceAgent:
                 else "needs_review"
             ),
             "recommendations": reviews,
+            "solution_validation": "passed",
         }
         state["evidence_review"] = review
         record_trace(

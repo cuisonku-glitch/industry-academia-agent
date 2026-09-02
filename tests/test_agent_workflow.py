@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from src.agents.workflow import (
+    ClarificationAgent,
     Coordinator,
     EvidenceAgent,
     MatchingAgent,
@@ -15,9 +16,12 @@ from src.agents.workflow import (
     ReportAgent,
     RequirementAgent,
     ResearchAgent,
+    SolutionAgent,
     new_state,
 )
 from src.agents.coordinator import build_coordinator
+from src.extraction.enterprise_parser import parse_enterprise_need
+from src.solutions import build_enterprise_solution
 
 
 def make_teacher_profile() -> dict[str, Any]:
@@ -147,29 +151,34 @@ class AgentWorkflowTests(unittest.TestCase):
     def _coordinator(self, matcher: FakeMatcher) -> Coordinator:
         return Coordinator(
             requirement_agent=RequirementAgent(),
+            clarification_agent=ClarificationAgent(),
             research_agent=ResearchAgent(
                 teacher_directory=Path("unused"),
                 loader=lambda _: [make_teacher_profile()],
             ),
             paper_agent=PaperAgent(matcher, top_k=5),
             matching_agent=MatchingAgent(matcher, top_k=5),
+            solution_agent=SolutionAgent(),
             evidence_agent=EvidenceAgent(),
             report_agent=ReportAgent(),
         )
 
-    def test_coordinator_runs_six_agents_in_dependency_order(self) -> None:
+    def test_coordinator_runs_p1_agents_in_dependency_order(self) -> None:
         matcher = FakeMatcher()
         state = self._coordinator(matcher).run(
             "我们开发工业X射线探伤设备，需要高灵敏度探测。",
             input_mode="user",
+            requirement_confirmed=True,
         )
         self.assertEqual(
             [item["agent"] for item in state["trace"]],
             [
                 "Requirement Agent",
+                "Clarification Agent",
                 "Research Agent",
                 "Paper Agent",
                 "Matching Agent",
+                "Solution Agent",
                 "Evidence Agent",
                 "Report Agent",
             ],
@@ -178,10 +187,29 @@ class AgentWorkflowTests(unittest.TestCase):
         self.assertIn("Chunk `paper_chunk_001`", state["report"])
         self.assertEqual(state["evidence_review"]["overall_status"], "passed")
         self.assertEqual(len(matcher.received_evidence["徐修文"]), 1)
+        self.assertEqual(state["solution_bundle"]["solution_gate"]["status"], "provisional")
+        self.assertTrue(state["route_drawio"].startswith("<?xml"))
+
+    def _state_for_evidence_agent(self, result: dict[str, Any]) -> dict[str, Any]:
+        request = "我们开发工业X射线探伤设备，需要高灵敏度探测。"
+        profile = parse_enterprise_need(request)
+        module_evidence = {
+            "M01": {"徐修文": list(result["recommendations"][0]["paper_evidence"])}
+        }
+        state = new_state(request, "user", requirement_confirmed=True)
+        state["enterprise_need"] = profile
+        state["match_result"] = result
+        state["solution_bundle"] = build_enterprise_solution(
+            profile,
+            result,
+            module_evidence,
+            confirmed=True,
+        )
+        return state
 
     def test_evidence_agent_flags_recommendation_without_paper_chunks(self) -> None:
-        state = new_state("测试需求", "user")
-        state["match_result"] = make_match_result(with_paper_evidence=False)
+        result = make_match_result(with_paper_evidence=False)
+        state = self._state_for_evidence_agent(result)
         EvidenceAgent().run(state)
         self.assertEqual(state["evidence_review"]["overall_status"], "needs_review")
         self.assertIn(
@@ -193,23 +221,23 @@ class AgentWorkflowTests(unittest.TestCase):
         state = self._coordinator(FakeMatcher()).run(
             "指南中的演示需求。",
             input_mode="demo",
+            requirement_confirmed=True,
         )
         self.assertIn("输入类型：指南示例演示", state["report"])
 
     def test_evidence_agent_rejects_tampered_teacher_source(self) -> None:
-        state = new_state("测试需求", "user")
         result = make_match_result()
         tampered = copy.deepcopy(result)
         tampered["recommendations"][0]["paper_evidence"][0]["teacher"] = "其他老师"
-        state["match_result"] = tampered
+        state = self._state_for_evidence_agent(tampered)
         EvidenceAgent().run(state)
         self.assertEqual(state["evidence_review"]["overall_status"], "needs_review")
 
     def test_production_builder_reuses_one_matcher_across_agents(self) -> None:
         matcher = FakeMatcher()
         coordinator = build_coordinator(matcher=matcher)
-        self.assertIs(coordinator.agents[2].matcher, matcher)
         self.assertIs(coordinator.agents[3].matcher, matcher)
+        self.assertIs(coordinator.agents[4].matcher, matcher)
 
 
 if __name__ == "__main__":

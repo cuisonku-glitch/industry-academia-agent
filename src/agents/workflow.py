@@ -9,14 +9,20 @@ from pathlib import Path
 try:
     from .coordinator import (
         DEFAULT_JSON_PATH,
+        DEFAULT_DRAWIO_PATH,
         DEFAULT_REPORT_PATH,
         Coordinator,
         build_coordinator,
         save_run,
     )
-    from .decision_agents import EvidenceAgent, MatchingAgent
+    from .decision_agents import EvidenceAgent, MatchingAgent, SolutionAgent
     from .report_agent import ReportAgent
-    from .source_agents import PaperAgent, RequirementAgent, ResearchAgent
+    from .source_agents import (
+        ClarificationAgent,
+        PaperAgent,
+        RequirementAgent,
+        ResearchAgent,
+    )
     from .state import new_state
     from ..extraction.enterprise_parser import DEFAULT_REQUEST
     from ..matching.matcher import DEFAULT_TEACHER_DIRECTORY, DEFAULT_TOP_K
@@ -25,14 +31,20 @@ except ImportError:
     sys.path.insert(0, str(project_root))
     from src.agents.coordinator import (
         DEFAULT_JSON_PATH,
+        DEFAULT_DRAWIO_PATH,
         DEFAULT_REPORT_PATH,
         Coordinator,
         build_coordinator,
         save_run,
     )
-    from src.agents.decision_agents import EvidenceAgent, MatchingAgent
+    from src.agents.decision_agents import EvidenceAgent, MatchingAgent, SolutionAgent
     from src.agents.report_agent import ReportAgent
-    from src.agents.source_agents import PaperAgent, RequirementAgent, ResearchAgent
+    from src.agents.source_agents import (
+        ClarificationAgent,
+        PaperAgent,
+        RequirementAgent,
+        ResearchAgent,
+    )
     from src.agents.state import new_state
     from src.extraction.enterprise_parser import DEFAULT_REQUEST
     from src.matching.matcher import DEFAULT_TEACHER_DIRECTORY, DEFAULT_TOP_K
@@ -52,6 +64,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-k", type=int, default=DEFAULT_TOP_K)
     parser.add_argument("--output-json", type=Path, default=DEFAULT_JSON_PATH)
     parser.add_argument("--output-report", type=Path, default=DEFAULT_REPORT_PATH)
+    parser.add_argument("--output-drawio", type=Path, default=DEFAULT_DRAWIO_PATH)
+    parser.add_argument(
+        "--confirm-requirement",
+        action="store_true",
+        help="确认已核对需求拆解；未设置时方案生成闸门保持暂停",
+    )
     return parser.parse_args()
 
 
@@ -68,12 +86,19 @@ def main() -> None:
         input_mode = "user"
 
     coordinator = build_coordinator(args.teachers, top_k=args.top_k)
-    paper_agent = coordinator.agents[2]
+    paper_agent = coordinator.agents[3]
     print(f"本地 Embedding 设备：{paper_agent.matcher.embedder.device}")
     print(f"输入类型：{'指南示例演示' if input_mode == 'demo' else '真实企业需求'}")
-    state = coordinator.run(request_text, input_mode=input_mode)
-    json_path, report_path = save_run(
-        state, args.output_json, args.output_report
+    state = coordinator.run(
+        request_text,
+        input_mode=input_mode,
+        requirement_confirmed=args.confirm_requirement,
+    )
+    json_path, report_path, drawio_path = save_run(
+        state,
+        args.output_json,
+        args.output_report,
+        args.output_drawio,
     )
     print("Agent 执行顺序：")
     for item in state["trace"]:
@@ -86,6 +111,7 @@ def main() -> None:
     )
     print(f"结构化运行记录：{json_path}")
     print(f"匹配报告：{report_path}")
+    print(f"可编辑技术路线：{drawio_path}")
 
 
 if __name__ == "__main__":

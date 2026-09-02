@@ -6,17 +6,35 @@ from datetime import datetime, timezone
 from typing import Any
 
 
-def new_state(request_text: str, input_mode: str) -> dict[str, Any]:
-    """Create the state passed between the six agents."""
+def new_state(
+    request_text: str,
+    input_mode: str,
+    *,
+    requirement_confirmed: bool = False,
+) -> dict[str, Any]:
+    """Create the auditable state passed through the enterprise workflow."""
     if not request_text.strip():
         raise ValueError("企业需求不能为空")
     return {
         "request_text": request_text.strip(),
         "input_mode": input_mode,
+        "requirement_confirmation": {
+            "confirmed": requirement_confirmed,
+            "status": (
+                "confirmed_by_user"
+                if requirement_confirmed
+                else "pending_user_confirmation"
+            ),
+        },
         "enterprise_need": None,
+        "clarification": None,
+        "need_modules": [],
         "teacher_profiles": [],
         "paper_candidates": {},
+        "module_evidence": {},
         "match_result": None,
+        "solution_bundle": None,
+        "route_drawio": None,
         "evidence_review": None,
         "report": None,
         "trace": [],

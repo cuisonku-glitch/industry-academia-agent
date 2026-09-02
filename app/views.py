@@ -11,6 +11,167 @@ def _page_text(page_start: Any, page_end: Any) -> str:
     return str(page_start) if page_start == page_end else f"{page_start}-{page_end}"
 
 
+def render_requirement_preview(draft: dict[str, Any]) -> None:
+    """Render the lightweight confirmation gate before GPU retrieval starts."""
+    profile = draft["profile"]
+    clarification = draft["clarification"]
+    modules = draft["modules"]
+
+    st.markdown("### 2. 核对结构化拆解")
+    industry_column, product_column, module_column, metric_column = st.columns(4)
+    industry_column.metric("行业场景", profile["industry"])
+    product_column.metric("产品/系统", profile["product"])
+    module_column.metric("技术模块", str(len(modules)))
+    metric_column.metric("量化指标", str(len(profile.get("target_metrics", []))))
+
+    if clarification["blocking_count"]:
+        st.warning(
+            f"发现 {clarification['blocking_count']} 个阻塞型未知项。"
+            "仍可确认当前拆解并生成草案，但系统不会把未知项填成事实。"
+        )
+    else:
+        st.success("关键字段已具备，可确认拆解后进入模块级论文检索。")
+
+    for module in modules:
+        with st.expander(f"{module['module_id']} · {module['name']}"):
+            st.markdown(f"**企业原话：** {'；'.join(module['source_phrases'])}")
+            st.markdown(f"**当前问题：** {module['problem_statement']}")
+            st.markdown(
+                "**量化验收：** "
+                + (
+                    "；".join(
+                        metric["raw_text"]
+                        for metric in module["acceptance_metrics"]
+                    )
+                    or "待企业补充"
+                )
+            )
+            for item in module["missing_information"]:
+                st.caption(f"待澄清：{item}")
+
+    with st.expander("查看所有待澄清问题"):
+        if clarification["questions"]:
+            for item in clarification["questions"]:
+                st.markdown(
+                    f"- **[{item['severity']}] {item['question']}**  "
+                    f"{item['reason']}"
+                )
+        else:
+            st.markdown("- 暂无待澄清项。")
+
+
+def render_solution_result(state: dict[str, Any]) -> None:
+    """Render the P1 enterprise solution, route, evaluation, and landing plan."""
+    bundle = state["solution_bundle"]
+    gate = bundle["solution_gate"]
+    evaluation = bundle["transfer_evaluation"]
+
+    st.divider()
+    st.markdown("### 3. 证据约束的组合方案")
+    if gate["status"] == "passed":
+        st.success("方案闸门通过：核心模块有论文证据且关键指标具备测试条件。")
+    elif gate["status"] == "provisional":
+        st.warning("当前为待确认草案；请根据闸门说明补齐指标或论文证据。")
+    else:
+        st.error("方案闸门暂停，当前不会生成无依据的候选方案。")
+    for reason in gate["reasons"]:
+        st.caption(reason)
+
+    for option in bundle["solution_options"]:
+        st.markdown(f"#### {option['solution_id']} · {option['name']}")
+        st.markdown(option["overall_principle"])
+        teacher_column, module_column, gap_column = st.columns(3)
+        teacher_column.metric("建议对接教师", option["recommended_teacher"])
+        module_column.metric("技术模块", str(len(option["modules"])))
+        gap_column.metric("证据缺口", str(len(option["uncovered_gaps"])))
+        rows = []
+        for module in option["modules"]:
+            rows.append(
+                {
+                    "模块": module["module_name"],
+                    "状态": module["status"],
+                    "导师": module["teacher"],
+                    "论文 Chunk": len(module["paper_evidence"]),
+                    "验收指标": "；".join(
+                        metric["raw_text"]
+                        for metric in module["acceptance_metrics"]
+                    ) or "待企业补充",
+                }
+            )
+        st.dataframe(rows, hide_index=True, width="stretch")
+    if not bundle["solution_options"]:
+        st.info("请先关闭需求确认或论文证据缺口。")
+
+    st.markdown("### 4. 技术路线")
+    route_rows = [
+        {
+            "节点": node["node_id"],
+            "阶段": node["stage"],
+            "任务": node["name"],
+            "状态": node["status"],
+            "前置": "、".join(node["predecessors"]) or "无",
+            "责任建议": node["responsible_party"],
+        }
+        for node in bundle["technical_route"]["nodes"]
+    ]
+    if route_rows:
+        st.dataframe(route_rows, hide_index=True, width="stretch")
+        st.caption("下方可下载原生 `.drawio` 文件，节点与连线均可继续编辑。")
+    else:
+        st.info("方案闸门通过后才会生成技术路线。")
+
+    st.markdown("### 5. 转化评估与决策门")
+    decision_column, score_column, completeness_column = st.columns(3)
+    decision_column.metric("当前决策", evaluation["decision"])
+    score_column.metric(
+        "已知维度分",
+        (
+            f"{evaluation['known_dimension_score']}/100"
+            if evaluation["known_dimension_score"] is not None
+            else "未知"
+        ),
+    )
+    completeness_column.metric(
+        "证据完整度", f"{evaluation['evidence_completeness']}%"
+    )
+    st.caption(
+        f"已知维度覆盖权重 {evaluation['known_weight']:.0%}。"
+        f"{evaluation['note']}"
+    )
+    dimension_rows = []
+    for dimension in evaluation["dimensions"].values():
+        dimension_rows.append(
+            {
+                "维度": dimension["label"],
+                "分数": (
+                    f"{dimension['score']}/100"
+                    if dimension["score"] is not None
+                    else "未知"
+                ),
+                "来源": dimension["source_type"],
+                "缺口": "；".join(dimension["missing"]),
+            }
+        )
+    st.dataframe(dimension_rows, hide_index=True, width="stretch")
+    with st.expander("查看五项硬门槛"):
+        for gate_item in evaluation["hard_gates"]:
+            st.markdown(
+                f"- **{gate_item['gate_id']} {gate_item['name']}**："
+                f"{gate_item['status']}"
+            )
+
+    st.markdown("### 6. 分阶段落地计划")
+    for milestone in bundle["landing_plan"]:
+        with st.expander(f"{milestone['milestone_id']} · {milestone['goal']}"):
+            st.markdown(f"**责任建议：** {milestone['responsible_party']}")
+            st.markdown(f"**交付物：** {'；'.join(milestone['deliverables'])}")
+            st.markdown(
+                "**验收/退出：** "
+                + "；".join(milestone["acceptance_or_exit_criteria"])
+            )
+            st.markdown(f"**决策门：** {milestone['decision_gate']}")
+
+
 def render_match_result(state: dict[str, Any]) -> None:
     """Show all matching fields required by the project guide."""
     result = state["match_result"]

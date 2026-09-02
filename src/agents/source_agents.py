@@ -13,6 +13,11 @@ from ..matching.matcher import (
     build_enterprise_query,
     load_teacher_profiles,
 )
+from ..solutions import (
+    build_clarification,
+    build_module_query,
+    decompose_technical_need,
+)
 from .state import record_trace
 
 
@@ -67,6 +72,31 @@ class ResearchAgent:
         )
 
 
+class ClarificationAgent:
+    """Expose unknowns and build only traceable technical modules."""
+
+    name = "Clarification Agent"
+
+    def run(self, state: dict[str, Any]) -> None:
+        profile = state.get("enterprise_need")
+        if not profile:
+            raise RuntimeError("Clarification Agent 缺少企业画像")
+        confirmed = bool(state["requirement_confirmation"]["confirmed"])
+        clarification = build_clarification(profile)
+        modules = decompose_technical_need(profile, confirmed=confirmed)
+        state["clarification"] = clarification
+        state["need_modules"] = modules
+        record_trace(
+            state,
+            self.name,
+            {
+                "requirement_confirmed": confirmed,
+                "module_count": len(modules),
+                "blocking_question_count": clarification["blocking_count"],
+            },
+        )
+
+
 class PaperAgent:
     """Find relevant local paper chunks for each candidate teacher."""
 
@@ -94,6 +124,18 @@ class PaperAgent:
                 query, teacher, self.top_k
             )
         state["paper_candidates"] = candidates
+        module_candidates: dict[str, dict[str, list[dict[str, Any]]]] = {}
+        for module in state.get("need_modules", []):
+            module_query = build_module_query(module, enterprise)
+            module_candidates[module["module_id"]] = {
+                profile["teacher"]: self.matcher.retrieve_paper_evidence(
+                    module_query,
+                    profile["teacher"],
+                    self.top_k,
+                )
+                for profile in profiles
+            }
+        state["module_evidence"] = module_candidates
         record_trace(
             state,
             self.name,
@@ -101,6 +143,10 @@ class PaperAgent:
                 "top_k_per_teacher": self.top_k,
                 "evidence_count_by_teacher": {
                     teacher: len(items) for teacher, items in candidates.items()
+                },
+                "module_evidence_count": {
+                    module_id: sum(len(items) for items in by_teacher.values())
+                    for module_id, by_teacher in module_candidates.items()
                 },
             },
         )

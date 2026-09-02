@@ -8,13 +8,21 @@ from typing import Any
 
 from streamlit.testing.v1 import AppTest
 
+from src.extraction.enterprise_parser import parse_enterprise_need
+from src.solutions import build_enterprise_solution, route_to_drawio
+
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app" / "app.py"
 
 
 def make_display_state() -> dict[str, Any]:
-    return {
-        "match_result": {
+    request = (
+        "我们开发工业X射线探伤设备，现有灵敏度不足，希望高灵敏度，"
+        "灵敏度至少1200 μC Gy^-1 cm^-2，在50 kVp条件下测试，"
+        "已有小型样机，不能使用铅。"
+    )
+    profile = parse_enterprise_need(request)
+    match_result = {
             "recommendations": [
                 {
                     "recommended_teacher": "徐修文",
@@ -27,6 +35,8 @@ def make_display_state() -> dict[str, Any]:
                             "chunk_id": "paper_chunk_001",
                             "similarity": 0.8,
                             "excerpt": "论文证据摘录。",
+                            "teacher": "徐修文",
+                            "author": "测试学生",
                         }
                     ],
                     "core_matching_technologies": [
@@ -59,8 +69,23 @@ def make_display_state() -> dict[str, Any]:
                     },
                 }
             ]
-        },
+        }
+    module_evidence = {
+        "M01": {"徐修文": list(match_result["recommendations"][0]["paper_evidence"])}
+    }
+    bundle = build_enterprise_solution(
+        profile,
+        match_result,
+        module_evidence,
+        confirmed=True,
+    )
+    return {
+        "request_text": request,
+        "match_result": match_result,
         "evidence_review": {"overall_status": "passed"},
+        "solution_bundle": bundle,
+        "route_drawio": route_to_drawio(bundle["technical_route"]),
+        "report": "# 测试报告\n",
     }
 
 
@@ -73,16 +98,32 @@ class StreamlitAppTests(unittest.TestCase):
 
     def test_page_has_both_required_workflows(self) -> None:
         app = self._app()
-        self.assertEqual([tab.label for tab in app.tabs], ["企业需求匹配", "论文问答"])
+        self.assertEqual(
+            [tab.label for tab in app.tabs],
+            ["企业端 · 组合方案", "论文问答"],
+        )
         self.assertEqual(app.text_area[0].label, "企业需求原话")
         self.assertEqual(app.text_input[0].label, "问")
-        self.assertEqual([button.label for button in app.button], ["开始分析", "查询论文"])
+        self.assertEqual([button.label for button in app.button], ["解析需求", "查询论文"])
 
     def test_empty_enterprise_request_is_rejected_before_model_loading(self) -> None:
         app = self._app()
         app.button[0].click().run()
         self.assertIn("请先输入企业需求原话", app.error[0].value)
         self.assertEqual(len(app.exception), 0)
+
+    def test_requirement_is_previewed_before_gpu_workflow(self) -> None:
+        app = self._app()
+        app.text_area[0].input(
+            "我们开发工业X射线探伤设备，需要高灵敏度探测，已有小型样机。"
+        )
+        app.button[0].click().run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertIn(
+            "核对结构化拆解",
+            "\n".join(item.value for item in app.markdown),
+        )
+        self.assertIn("确认需求并生成组合方案", [item.label for item in app.button])
 
     def test_paper_question_requires_explicit_data_consent(self) -> None:
         app = self._app()
@@ -105,8 +146,11 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn("相关论文", rendered_text)
         self.assertIn("匹配依据", rendered_text)
         self.assertIn("潜在合作建议", rendered_text)
-        self.assertEqual(app.metric[0].value, "徐修文")
-        self.assertEqual(app.metric[1].value, "59.19%")
+        self.assertIn("转化评估与决策门", rendered_text)
+        self.assertIn("分阶段落地计划", rendered_text)
+        metric_values = [item.value for item in app.metric]
+        self.assertIn("徐修文", metric_values)
+        self.assertIn("59.19%", metric_values)
 
 
 if __name__ == "__main__":

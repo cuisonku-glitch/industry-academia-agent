@@ -15,10 +15,17 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(APP_DIRECTORY) not in sys.path:
     sys.path.insert(0, str(APP_DIRECTORY))
 
-from views import render_match_result, render_rag_result
+from views import (
+    render_match_result,
+    render_rag_result,
+    render_requirement_preview,
+    render_solution_result,
+)
 from src.agents.coordinator import build_coordinator
+from src.extraction.enterprise_parser import parse_enterprise_need
 from src.matching.matcher import ResearchIndustryMatcher
 from src.retrieval.rag import RAGPipeline
+from src.solutions import build_clarification, decompose_technical_need
 
 
 st.set_page_config(
@@ -67,42 +74,98 @@ with st.sidebar:
     st.info("企业匹配完全本地运行；论文问答需要调用 Moonshot API。")
 
 st.title("产学研合作智能分析")
-st.caption("输入企业真实需求，获得可复算评分、教师推荐、相关论文和页码证据。")
+st.caption("先确认需求拆解，再生成有论文证据的技术方案、路线与落地计划。")
 
-matching_tab, qa_tab = st.tabs(["企业需求匹配", "论文问答"])
+matching_tab, qa_tab = st.tabs(["企业端 · 组合方案", "论文问答"])
 
 with matching_tab:
-    enterprise_request = st.text_area(
-        "企业需求原话",
-        height=150,
-        placeholder="例如：我们正在开发……目前遇到……希望获得……能力，并满足……约束。",
-        help="请直接填写真实业务描述。页面不会自动填入指南示例。",
-    )
-    if st.button("开始分析", type="primary", width="stretch"):
+    st.markdown("### 1. 输入并核对需求")
+    with st.form("enterprise_requirement_form"):
+        enterprise_request = st.text_area(
+            "企业需求原话",
+            height=170,
+            placeholder=(
+                "建议包含：产品与场景、当前问题、目标能力、量化指标与测试条件、"
+                "已有基础、成本/周期/材料等约束、明确不能采用的路线。"
+            ),
+            help="页面不会自动填入指南示例，也不会把系统建议冒充企业需求。",
+        )
+        parse_submitted = st.form_submit_button(
+            "解析需求",
+            type="primary",
+            width="stretch",
+        )
+    if parse_submitted:
         if not enterprise_request.strip():
             st.error("请先输入企业需求原话。")
         else:
             try:
-                with st.spinner("正在解析需求、检索论文并核验证据……"):
+                profile = parse_enterprise_need(enterprise_request)
+                st.session_state["requirement_draft"] = {
+                    "request_text": enterprise_request.strip(),
+                    "profile": profile,
+                    "clarification": build_clarification(profile),
+                    "modules": decompose_technical_need(profile),
+                }
+                st.session_state.pop("match_state", None)
+            except Exception as exc:
+                st.error(f"需求解析失败：{exc}")
+
+    draft = st.session_state.get("requirement_draft")
+    if draft:
+        render_requirement_preview(draft)
+        confirmation = st.checkbox(
+            "我已逐项核对：下方拆解忠实反映企业原话；未知项继续保留为待澄清。",
+            key="requirement_confirmation_checkbox",
+        )
+        if st.button(
+            "确认需求并生成组合方案",
+            type="primary",
+            width="stretch",
+            disabled=not confirmation,
+        ):
+            try:
+                with st.spinner("正在按技术模块检索论文、生成路线并执行转化闸门……"):
                     st.session_state["match_state"] = get_coordinator().run(
-                        enterprise_request,
+                        draft["request_text"],
                         input_mode="user",
+                        requirement_confirmed=True,
                     )
             except Exception as exc:
-                st.error(f"分析失败：{exc}")
+                st.error(f"方案生成失败：{exc}")
     if "match_state" in st.session_state:
-        render_match_result(st.session_state["match_state"])
+        state = st.session_state["match_state"]
+        render_solution_result(state)
+        with st.expander("查看原有教师匹配明细"):
+            render_match_result(state)
+        report_column, route_column = st.columns(2)
+        report_column.download_button(
+            "下载完整 Markdown 报告",
+            data=state["report"],
+            file_name="enterprise_solution_report.md",
+            mime="text/markdown",
+            width="stretch",
+        )
+        route_column.download_button(
+            "下载可编辑 draw.io 技术路线",
+            data=state["route_drawio"],
+            file_name="enterprise_technical_route.drawio",
+            mime="application/xml",
+            width="stretch",
+        )
 
 with qa_tab:
     st.markdown("根据本地论文检索结果向 Kimi 提问，回答会附论文与页码依据。")
-    paper_question = st.text_input(
-        "问",
-        placeholder="这个老师主要做什么？",
-    )
-    consent = st.checkbox(
-        "我同意将本地检索到的最多 5 个论文片段发送到 .env 配置的 Moonshot API。"
-    )
-    if st.button("查询论文", width="stretch"):
+    with st.form("paper_qa_form"):
+        paper_question = st.text_input(
+            "问",
+            placeholder="这个老师主要做什么？",
+        )
+        consent = st.checkbox(
+            "我同意将本地检索到的最多 5 个论文片段发送到 .env 配置的 Moonshot API。"
+        )
+        qa_submitted = st.form_submit_button("查询论文", width="stretch")
+    if qa_submitted:
         if not paper_question.strip():
             st.error("请先输入论文问题。")
         elif not consent:

@@ -20,8 +20,9 @@ class ReportAgent:
     def run(self, state: dict[str, Any]) -> None:
         result = state.get("match_result")
         review = state.get("evidence_review")
-        if not result or not review:
-            raise RuntimeError("Report Agent 缺少匹配结果或证据审查")
+        bundle = state.get("solution_bundle")
+        if not result or not review or not bundle:
+            raise RuntimeError("Report Agent 缺少匹配结果、企业方案或证据审查")
 
         mode_label = "指南示例演示" if state["input_mode"] == "demo" else "用户输入"
         lines = [
@@ -33,8 +34,41 @@ class ReportAgent:
             "",
             state["request_text"],
             "",
-            "## 推荐结果",
+            "## 需求确认与待澄清项",
+            "",
+            "- 需求确认状态："
+            + bundle["requirement_confirmation"]["status"],
+            f"- 阻塞型问题：{bundle['clarification']['blocking_count']} 项",
         ]
+        questions = bundle["clarification"]["questions"]
+        lines.extend(
+            [
+                f"- [{item['severity']}] {item['question']}（{item['reason']}）"
+                for item in questions
+            ]
+            or ["- 暂无待澄清项。"]
+        )
+        lines.extend(["", "## 技术模块拆解", ""])
+        for module in bundle["need_modules"]:
+            metrics = "；".join(
+                item["raw_text"] for item in module["acceptance_metrics"]
+            ) or "待企业补充"
+            lines.extend(
+                [
+                    f"### {module['module_id']} · {module['name']}",
+                    "",
+                    f"- 企业原话：{'；'.join(module['source_phrases'])}",
+                    f"- 当前问题：{module['problem_statement']}",
+                    f"- 验收指标：{metrics}",
+                    f"- 确认状态：{module['confirmation_status']}",
+                ]
+            )
+        lines.extend(
+            [
+            "",
+            "## 推荐结果",
+            ]
+        )
         review_by_teacher = {
             item["teacher"]: item for item in review["recommendations"]
         }
@@ -94,10 +128,124 @@ class ReportAgent:
         lines.extend(
             [
                 "",
+                "## 证据约束方案",
+                "",
+                f"- 方案闸门：{bundle['solution_gate']['status']}",
+            ]
+        )
+        lines.extend(
+            f"- 闸门说明：{reason}"
+            for reason in bundle["solution_gate"]["reasons"]
+        )
+        for option in bundle["solution_options"]:
+            lines.extend(
+                [
+                    "",
+                    f"### {option['solution_id']} · {option['name']}",
+                    "",
+                    f"- 状态：{option['status']}",
+                    f"- 推荐教师：{option['recommended_teacher']}",
+                    f"- 原则：{option['overall_principle']}",
+                    f"- 证据缺口：{'、'.join(option['uncovered_gaps']) or '无'}",
+                    "",
+                    "模块证据：",
+                ]
+            )
+            for module in option["modules"]:
+                lines.append(
+                    f"- {module['module_id']} {module['module_name']}："
+                    f"{module['status']}，论文 Chunk "
+                    f"{len(module['paper_evidence'])} 个"
+                )
+        if not bundle["solution_options"]:
+            lines.append("- 当前没有通过方案生成闸门的候选方案。")
+
+        lines.extend(["", "## 技术路线", ""])
+        for node in bundle["technical_route"]["nodes"]:
+            criteria = "；".join(
+                item["criterion"] for item in node["acceptance_criteria"]
+            )
+            lines.extend(
+                [
+                    f"### {node['node_id']} · {node['name']}",
+                    "",
+                    f"- 阶段：{node['stage']}｜状态：{node['status']}",
+                    f"- 前置节点：{'、'.join(node['predecessors']) or '无'}",
+                    f"- 责任建议：{node['responsible_party']}",
+                    f"- 验收/退出口径：{criteria}",
+                ]
+            )
+        if not bundle["technical_route"]["nodes"]:
+            lines.append("- 技术路线尚未生成；请先确认需求并关闭证据缺口。")
+
+        evaluation = bundle["transfer_evaluation"]
+        score_text = (
+            str(evaluation["known_dimension_score"])
+            if evaluation["known_dimension_score"] is not None
+            else "未知"
+        )
+        lines.extend(
+            [
+                "",
+                "## 转化评估",
+                "",
+                f"- 当前决策：`{evaluation['decision']}`",
+                f"- 已知维度分：{score_text}/100（覆盖权重 "
+                f"{evaluation['known_weight']:.0%}）",
+                f"- 证据完整度：{evaluation['evidence_completeness']}%",
+                f"- 说明：{evaluation['note']}",
+                "",
+                "### 四维评估",
+                "",
+            ]
+        )
+        for dimension in evaluation["dimensions"].values():
+            value = (
+                f"{dimension['score']}/100"
+                if dimension["score"] is not None
+                else "未知"
+            )
+            missing = "；".join(dimension["missing"])
+            lines.append(
+                f"- {dimension['label']}：{value}｜来源 "
+                f"{dimension['source_type']}"
+                + (f"｜缺口：{missing}" if missing else "")
+            )
+        lines.extend(["", "### 硬门槛", ""])
+        for gate in evaluation["hard_gates"]:
+            lines.append(
+                f"- {gate['gate_id']} {gate['name']}：{gate['status']}"
+            )
+
+        lines.extend(["", "## 分阶段落地计划", ""])
+        for milestone in bundle["landing_plan"]:
+            lines.extend(
+                [
+                    f"### {milestone['milestone_id']} · {milestone['goal']}",
+                    "",
+                    f"- 责任建议：{milestone['responsible_party']}",
+                    f"- 交付物：{'；'.join(milestone['deliverables'])}",
+                    "- 验收/退出："
+                    + "；".join(milestone["acceptance_or_exit_criteria"]),
+                    f"- 决策门：{milestone['decision_gate']}",
+                ]
+            )
+
+        lines.extend(
+            [
+                "",
                 "## 评分说明",
                 "",
                 "总分由语义相似度、技术能力覆盖、应用领域匹配和论文证据数量"
                 "四项指标加权生成，不使用大模型主观评分。",
+                "",
+                "## 事实边界",
+                "",
+                "- `enterprise_confirmed`：来自企业原话及本次确认。",
+                "- `paper_evidence`：来自可定位的本地论文 Chunk 与页码。",
+                "- `system_suggestion`：系统提出的项目组织建议，不是企业事实。",
+                "- `unknown`：当前材料无法判断，未用默认值冒充结论。",
+                "- 本报告不替代知识产权、法规、安全、财务和工程专业审查。",
             ]
         )
         state["report"] = "\n".join(lines) + "\n"

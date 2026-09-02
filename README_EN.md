@@ -2,7 +2,7 @@
 
 [中文](README.md) | [English](README_EN.md)
 
-An evidence-grounded industry–academia matching prototype. It parses papers locally, builds a vector database and traceable teacher research profiles, and produces reproducible matches between original enterprise requests and research capabilities. The Streamlit interface provides enterprise matching and paper Q&A with page-level citations.
+An evidence-grounded industry–academia transfer prototype. It parses papers locally, builds a vector database and traceable teacher research profiles, decomposes original enterprise requests into confirmable technical modules, and produces evidence-gated solution packages, technical routes, transfer assessments, and phased landing plans. The Streamlit interface provides an enterprise solution workbench and paper Q&A with page-level citations.
 
 > Data notice: this public repository does not include real papers, teacher profiles, enterprise requests, vector databases, or API keys. Everything under `examples/` is fully synthetic and exists only to validate installation and demonstrate the workflow.
 
@@ -12,9 +12,14 @@ An evidence-grounded industry–academia matching prototype. It parses papers lo
 - Local `BAAI/bge-small-zh-v1.5` embeddings on CPU or NVIDIA GPU
 - ChromaDB persistence and evidence retrieval
 - Traceable research-capability extraction and teacher profiling
-- Structured parsing of original enterprise requirements
+- Structured parsing of requirements, target metrics, test conditions, existing foundations, and excluded approaches
+- A lightweight requirement-confirmation gate before GPU retrieval, with unknowns preserved as clarification items
+- Module-level paper and teacher retrieval without inventing extra solution alternatives
+- Technical routes with dependencies, suggested ownership, acceptance/exit criteria, and phased landing plans
+- A four-dimension known-only transfer assessment with evidence completeness and five hard gates
+- Downloadable Markdown reports and native, editable `.drawio` routes
 - Reproducible teacher ranking with fixed, visible score weights
-- A six-role Agent workflow with an auditable execution and evidence-review trace
+- An eight-role Agent workflow with auditable requirement, retrieval, solution, and evidence-review traces
 - Moonshot/Kimi Q&A over at most five locally retrieved paper chunks
 - One-click Windows setup, synthetic sample data, and double-click web launchers
 
@@ -64,7 +69,7 @@ python src/extraction/capability_extractor.py --send-to-moonshot
 python src/extraction/teacher_profiler.py
 ```
 
-5. Start the web app and enter the enterprise's original wording.
+5. Start the web app, enter the enterprise's original wording, review the structured decomposition, then explicitly confirm it before generating a solution.
 
 ## Moonshot/Kimi configuration
 
@@ -86,8 +91,8 @@ Never commit `.env`. The web app sends at most five locally retrieved paper chun
 # Run all offline tests
 python -m unittest discover -s tests -v
 
-# Run the six-Agent workflow
-python src/agents/workflow.py --text "original enterprise requirement"
+# Run the P1 enterprise workflow; explicit confirmation opens the solution gate
+python src/agents/workflow.py --text "original enterprise requirement" --confirm-requirement
 
 # Run paper RAG with Kimi
 python src/retrieval/rag.py
@@ -120,7 +125,8 @@ src/repository/       SQLite paper catalog and vector-index contract
 src/evaluation/       Offline retrieval quality metrics
 src/extraction/       Capability, teacher, and enterprise parsing
 src/matching/         Transparent weighted matching
-src/agents/           Six-Agent coordination and reports
+src/solutions/        Modules, evidence-gated solutions, routes, assessment, and draw.io export
+src/agents/           Eight-Agent coordination, evidence review, and reports
 tests/                Offline unit and Streamlit tests
 docs/                 Installation, acceptance, and release notes
 ```
@@ -129,6 +135,8 @@ docs/                 Installation, acceptance, and release notes
 
 - Real paper data is not bundled. Users must import authorized content themselves.
 - The current PDF pipeline focuses on text and does not yet interpret figures, complex tables, or scanned-page OCR.
+- Engineering maturity, cost, IP, regulatory, and safety dimensions remain unknown until supporting investigation is available.
+- The enterprise workflow emits only as many evidence-supported solutions as it can justify; it does not pad the result to three alternatives.
 - The synthetic dataset validates software behavior only; it is not a real research result or recommendation.
 - This release is a local prototype without user accounts, multi-tenant storage, or public hosting.
 
@@ -137,6 +145,7 @@ docs/                 Installation, acceptance, and release notes
 - `v0.1.0`: first runnable local MVP.
 - `v0.1.1`: bilingual documentation, MIT license, portable Windows setup/launchers, and synthetic sample data.
 - `v0.1.2`: layout-aware PDF parsing, section-aware chunks, SQLite paper catalog, versioned vector collection, and retrieval evaluation.
+- `master` development checkpoint: the first P1 enterprise loop with requirement confirmation, module retrieval, solution/route/assessment, and landing-report output.
 
 ## License
 

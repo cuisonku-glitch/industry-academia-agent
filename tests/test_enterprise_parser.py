@@ -49,6 +49,24 @@ class EnterpriseParserTests(unittest.TestCase):
         self.assertIn("高灵敏度X射线探测", profile["required_capabilities"])
         self.assertTrue(any("电压不超过20 V" in item for item in profile["constraints"]))
 
+    def test_numeric_targets_foundations_and_exclusions_remain_traceable(self) -> None:
+        request = (
+            "我们生产X射线探测器，已有小型样机，要求灵敏度至少1200 μC "
+            "Gy^-1 cm^-2，工作电压不超过20 V，在50 kVp条件下测试，不能使用铅。"
+        )
+        profile = parse_enterprise_need(request)
+        self.assertEqual(len(profile["target_metrics"]), 2)
+        self.assertEqual(profile["target_metrics"][0]["name"], "灵敏度")
+        self.assertEqual(profile["target_metrics"][0]["operator"], ">=")
+        self.assertEqual(profile["target_metrics"][0]["unit"], "μC Gy^-1 cm^-2")
+        self.assertEqual(
+            profile["target_metrics"][0]["test_condition"],
+            "在50 kVp条件下测试",
+        )
+        self.assertEqual(profile["existing_foundations"], ["已有小型样机"])
+        self.assertEqual(profile["excluded_approaches"], ["不能使用铅"])
+        self.assertNotIn("在50 kVp条件下测试", profile["unparsed_fragments"])
+
     def test_unknown_industry_and_product_remain_explicitly_unknown(self) -> None:
         profile = parse_enterprise_need("希望获得快速响应能力。")
         self.assertEqual(profile["industry"], "未明确")
