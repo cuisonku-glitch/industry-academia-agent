@@ -134,6 +134,9 @@ python -m streamlit run app/app.py
 
 # 递归登记大型论文库并生成待审核标签（纯本地）
 python scripts/sync_paper_library.py --papers-dir "D:\你的论文目录"
+
+# 每次解析 10 篇正文（纯本地，可恢复）
+python scripts/parse_paper_library.py --catalog data/metadata/papers.sqlite3 --limit 10 --recover-interrupted
 ```
 
 ## 数据与隐私边界

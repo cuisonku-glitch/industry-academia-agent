@@ -620,6 +620,28 @@ class PaperCatalog:
             )
         )
 
+    def mark_parsed(
+        self,
+        paper_id: str,
+        *,
+        page_count: int,
+        parser_version: str,
+        pipeline_version: str = "",
+    ) -> PaperRecord:
+        existing = self.get(paper_id)
+        if existing is None:
+            raise KeyError(f"论文不存在：{paper_id}")
+        return self.upsert(
+            replace(
+                existing,
+                page_count=page_count,
+                ingestion_status="parsed",
+                parser_version=parser_version,
+                pipeline_version=pipeline_version,
+                error_message="",
+            )
+        )
+
     def search(
         self,
         query: str = "",
@@ -631,6 +653,7 @@ class PaperCatalog:
         year: int | None = None,
         keyword: str = "",
         tag: str = "",
+        exact_teacher: bool = False,
         limit: int = 50,
         offset: int = 0,
     ) -> list[PaperRecord]:
@@ -650,6 +673,7 @@ class PaperCatalog:
             year=year,
             keyword=keyword,
             tag=tag,
+            exact_teacher=exact_teacher,
         )
         sql = (
             "SELECT * FROM papers"
@@ -672,6 +696,7 @@ class PaperCatalog:
         year: int | None = None,
         keyword: str = "",
         tag: str = "",
+        exact_teacher: bool = False,
     ) -> tuple[str, list[Any]]:
         clauses: list[str] = []
         params: list[Any] = []
@@ -691,8 +716,12 @@ class PaperCatalog:
             ("ingestion_status", ingestion_status),
         ):
             if value.strip():
-                clauses.append(f"{column} LIKE ?")
-                params.append(f"%{value.strip()}%")
+                if column == "teacher" and exact_teacher:
+                    clauses.append("teacher = ?")
+                    params.append(value.strip())
+                else:
+                    clauses.append(f"{column} LIKE ?")
+                    params.append(f"%{value.strip()}%")
         if year is not None:
             clauses.append("year = ?")
             params.append(int(year))
@@ -719,6 +748,7 @@ class PaperCatalog:
         year: int | None = None,
         keyword: str = "",
         tag: str = "",
+        exact_teacher: bool = False,
     ) -> int:
         if ingestion_status and ingestion_status not in INGESTION_STATUSES:
             raise ValueError(f"未知 ingestion_status：{ingestion_status}")
@@ -731,6 +761,7 @@ class PaperCatalog:
             year=year,
             keyword=keyword,
             tag=tag,
+            exact_teacher=exact_teacher,
         )
         with self._connect() as connection:
             return int(
@@ -738,6 +769,54 @@ class PaperCatalog:
                     "SELECT COUNT(*) FROM papers" + where_sql, params
                 ).fetchone()[0]
             )
+
+    def count_teacher_facets(
+        self,
+        query: str = "",
+        *,
+        ingestion_status: str = "",
+    ) -> int:
+        where_sql, params = self._search_filter(
+            query=query,
+            ingestion_status=ingestion_status,
+        )
+        with self._connect() as connection:
+            return int(
+                connection.execute(
+                    "SELECT COUNT(DISTINCT teacher) FROM papers" + where_sql,
+                    params,
+                ).fetchone()[0]
+            )
+
+    def teacher_facets(
+        self,
+        query: str = "",
+        *,
+        ingestion_status: str = "",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        if limit <= 0 or limit > 500:
+            raise ValueError("limit 必须在 1–500 之间")
+        if offset < 0:
+            raise ValueError("offset 不能为负数")
+        where_sql, params = self._search_filter(
+            query=query,
+            ingestion_status=ingestion_status,
+        )
+        params.extend([limit, offset])
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT teacher, COUNT(*) AS paper_count FROM papers"
+                + where_sql
+                + " GROUP BY teacher ORDER BY paper_count DESC, teacher COLLATE NOCASE "
+                "LIMIT ? OFFSET ?",
+                params,
+            ).fetchall()
+        return [
+            {"teacher": str(row["teacher"]), "paper_count": int(row["paper_count"])}
+            for row in rows
+        ]
 
     def all_records(self) -> list[PaperRecord]:
         """Return the complete catalog without imposing an interactive-search cap."""

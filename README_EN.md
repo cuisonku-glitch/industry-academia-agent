@@ -134,6 +134,9 @@ python -m streamlit run app/app.py
 
 # Register a recursive paper library and create reviewable tags (local only)
 python scripts/sync_paper_library.py --papers-dir "D:\your-paper-library"
+
+# Parse 10 full-text papers per recoverable local batch
+python scripts/parse_paper_library.py --catalog data/metadata/papers.sqlite3 --limit 10 --recover-interrupted
 ```
 
 ## Data and privacy boundary

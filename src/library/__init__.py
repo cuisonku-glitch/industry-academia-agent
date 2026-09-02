@@ -8,6 +8,12 @@ from .paper_library import (
     PaperLibraryService,
     UploadImportResult,
 )
+from .paper_ingestion import (
+    DEFAULT_PARSED_PAPER_DIRECTORY,
+    LIBRARY_PARSE_PIPELINE_VERSION,
+    PaperIngestionService,
+    ParseBatchResult,
+)
 
 __all__ = [
     "DEFAULT_LIBRARY_ROOT",
@@ -16,4 +22,8 @@ __all__ = [
     "LibrarySyncResult",
     "PaperLibraryService",
     "UploadImportResult",
+    "DEFAULT_PARSED_PAPER_DIRECTORY",
+    "LIBRARY_PARSE_PIPELINE_VERSION",
+    "PaperIngestionService",
+    "ParseBatchResult",
 ]
