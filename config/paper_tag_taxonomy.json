@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "notice": "Deterministic title rules create reviewable suggestions only. They never become confirmed facts automatically.",
+  "rules": [
+    {"category": "research_direction", "value": "无损检测", "keywords": ["无损检测", "涡流检测", "超声检测", "探伤"], "confidence": 0.9},
+    {"category": "research_direction", "value": "X射线探测与成像", "keywords": ["x射线", "x-ray", "x ray", "射线探测", "射线成像"], "confidence": 0.92},
+    {"category": "research_direction", "value": "天线与电磁场", "keywords": ["天线", "电磁散射", "电磁波", "频率选择", "微波"], "confidence": 0.86},
+    {"category": "research_direction", "value": "人工智能与计算机视觉", "keywords": ["深度学习", "机器学习", "神经网络", "目标检测", "目标跟踪", "计算机视觉"], "confidence": 0.84},
+    {"category": "research_direction", "value": "传感与测量", "keywords": ["传感器", "传感", "测量", "检测概率"], "confidence": 0.78},
+    {"category": "material", "value": "钙钛矿", "keywords": ["钙钛矿", "mapbbr3", "cspbbr3"], "confidence": 0.96},
+    {"category": "material", "value": "闪烁体", "keywords": ["闪烁体", "scintillator"], "confidence": 0.96},
+    {"category": "device", "value": "探测器", "keywords": ["探测器", "detector"], "confidence": 0.88},
+    {"category": "device", "value": "天线", "keywords": ["天线", "antenna"], "confidence": 0.9},
+    {"category": "device", "value": "雷达", "keywords": ["雷达", "radar"], "confidence": 0.9},
+    {"category": "method", "value": "直写印刷", "keywords": ["直写印刷", "direct ink writing"], "confidence": 0.96},
+    {"category": "method", "value": "数值仿真", "keywords": ["有限元", "仿真", "模拟", "元模型"], "confidence": 0.72},
+    {"category": "method", "value": "深度学习", "keywords": ["深度学习", "神经网络"], "confidence": 0.9},
+    {"category": "application", "value": "工业检测", "keywords": ["工业检测", "无损检测", "探伤", "缺陷检测"], "confidence": 0.86},
+    {"category": "application", "value": "医学成像", "keywords": ["医学成像", "医疗成像"], "confidence": 0.9},
+    {"category": "application", "value": "无线通信", "keywords": ["无线通信", "基站", "通信系统"], "confidence": 0.78}
+  ]
+}

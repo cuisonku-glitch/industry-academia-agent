@@ -46,6 +46,15 @@ $Url = "http://127.0.0.1:$Port"
 $HealthUrl = "$Url/_stcore/health"
 $env:PYTHONUTF8 = '1'
 $env:STREAMLIT_BROWSER_GATHER_USAGE_STATS = 'false'
+if (-not $env:INDUSTRY_AGENT_CATALOG_PATH) {
+    $env:INDUSTRY_AGENT_CATALOG_PATH = Join-Path $ProjectRoot 'data\metadata\papers.sqlite3'
+}
+if (-not $env:INDUSTRY_AGENT_PAPER_LIBRARY_DIR) {
+    $adjacentPaperLibrary = Join-Path (Split-Path $ProjectRoot -Parent) '论文'
+    if (Test-Path -LiteralPath $adjacentPaperLibrary -PathType Container) {
+        $env:INDUSTRY_AGENT_PAPER_LIBRARY_DIR = $adjacentPaperLibrary
+    }
+}
 
 if ($CheckOnly) {
     Write-Host 'Web launcher check passed.' -ForegroundColor Green

@@ -1,0 +1,454 @@
+"""Academy-side paper library and review workbench."""
+
+from __future__ import annotations
+
+import importlib.util
+import math
+import os
+from pathlib import Path
+
+import streamlit as st
+
+from src.library import DEFAULT_LIBRARY_ROOT, PaperLibraryService
+from src.repository import (
+    DEFAULT_CATALOG_PATH,
+    INGESTION_STATUSES,
+    TAG_CATEGORIES,
+    TAG_REVIEW_STATUSES,
+    PaperCatalog,
+    PaperRecord,
+    PaperTag,
+)
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PAGE_SIZE = 30
+CATEGORY_LABELS = {
+    "research_direction": "研究方向",
+    "material": "材料",
+    "device": "器件/设备",
+    "method": "方法/工艺",
+    "metric": "性能指标",
+    "application": "应用场景",
+    "teacher": "导师",
+    "author": "作者",
+    "year": "年份",
+    "custom": "自定义",
+}
+STATUS_LABELS = {
+    "discovered": "已发现",
+    "metadata_pending": "待补元数据",
+    "parsing": "解析中",
+    "parsed": "已解析",
+    "indexed": "已索引",
+    "failed": "失败",
+}
+REVIEW_LABELS = {
+    "suggested": "待确认",
+    "confirmed": "已确认",
+    "rejected": "已驳回",
+}
+
+
+@st.cache_resource
+def get_paper_catalog(database_path: str) -> PaperCatalog:
+    return PaperCatalog(Path(database_path))
+
+
+@st.cache_resource
+def get_library_service(database_path: str) -> PaperLibraryService:
+    return PaperLibraryService(get_paper_catalog(database_path))
+
+
+def _catalog_path() -> str:
+    return os.getenv("INDUSTRY_AGENT_CATALOG_PATH", str(DEFAULT_CATALOG_PATH))
+
+
+def _library_root() -> Path:
+    return Path(
+        os.getenv("INDUSTRY_AGENT_PAPER_LIBRARY_DIR", str(DEFAULT_LIBRARY_ROOT))
+    ).resolve()
+
+
+def _split_lines(value: str) -> tuple[str, ...]:
+    return tuple(item.strip() for item in value.replace("，", "\n").splitlines() if item.strip())
+
+
+def _optional_year(value: int) -> int | None:
+    return value or None
+
+
+def _report_markdown(record: PaperRecord, tags: list[PaperTag]) -> str:
+    visible_tags = [tag for tag in tags if tag.review_status != "rejected"]
+    tag_lines = [
+        f"- {CATEGORY_LABELS.get(tag.category, tag.category)}：{tag.value} "
+        f"（{REVIEW_LABELS[tag.review_status]}；来源 {tag.source}；"
+        f"置信度 {tag.confidence:.0%}）"
+        for tag in visible_tags
+    ]
+    return "\n".join(
+        [
+            f"# {record.title}",
+            "",
+            "> 当前为论文目录与标签审核预览，不是论文精读结论。",
+            "",
+            "## 基础信息",
+            "",
+            f"- 导师：{record.teacher or '待补充'}",
+            f"- 作者：{'、'.join(record.authors) or '待补充'}",
+            f"- 院校/学院：{record.institution or '待补充'} / {record.college or '待补充'}",
+            f"- 年份：{record.year or '待补充'}",
+            f"- 状态：{STATUS_LABELS.get(record.ingestion_status, record.ingestion_status)}",
+            f"- 论文 ID：{record.paper_id}",
+            "",
+            "## 可审核标签",
+            "",
+            *(tag_lines or ["- 暂无标签"]),
+            "",
+            "## 后续分析状态",
+            "",
+            "- 论文精读：待执行",
+            "- 技术路线：待执行并人工审核节点/连线",
+            "- 产业转化分析：待执行",
+            "",
+            "事实、推断、专家判断和未知项将在正式分析报告中分开标记。",
+        ]
+    )
+
+
+def _render_sync_panel(service: PaperLibraryService, root: Path) -> None:
+    with st.popover("同步本地目录", icon=":material/sync:", width="stretch"):
+        st.caption(f"只扫描 PDF，并跳过 .venv、.idea 等目录：{root}")
+        if st.button("开始/继续增量同步", type="primary", width="stretch"):
+            progress_bar = st.progress(0, text="正在扫描论文……")
+
+            def update_progress(current: int, total: int) -> None:
+                progress_bar.progress(
+                    current / total if total else 1.0,
+                    text=f"正在登记 {current}/{total}",
+                )
+
+            try:
+                result = service.sync_directory(root, progress=update_progress)
+                progress_bar.empty()
+                st.success(
+                    f"同步完成：新增/变更 {result.registered}，"
+                    f"未变化 {result.unchanged}，失败 {result.failed}。"
+                )
+                for error in result.errors[:10]:
+                    st.warning(error)
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as exc:
+                progress_bar.empty()
+                st.error(f"同步失败，可修复后重试：{exc}")
+
+
+def _render_upload_panel(service: PaperLibraryService) -> None:
+    with st.popover("上传 PDF", icon=":material/upload_file:", width="stretch"):
+        with st.form("academy_upload_form", clear_on_submit=True):
+            uploaded = st.file_uploader(
+                "选择论文 PDF",
+                type="pdf",
+                max_upload_size=100,
+                help="会检查文件头、大小、加密状态和 SHA-256；同一论文不会重复保存。",
+            )
+            title = st.text_input("题名（可留空，默认取文件名）")
+            teacher = st.text_input("导师")
+            authors = st.text_input("作者（每行或中文逗号分隔）")
+            authorization_note = st.text_area(
+                "授权/使用说明",
+                placeholder="例如：本人论文，仅限本地科研分析。",
+            )
+            submitted = st.form_submit_button(
+                "校验并登记",
+                type="primary",
+                width="stretch",
+            )
+        if submitted:
+            if uploaded is None:
+                st.error("请先选择 PDF。")
+            else:
+                try:
+                    uploaded.seek(0)
+                    result = service.import_upload(
+                        uploaded,
+                        uploaded.name,
+                        title=title,
+                        teacher=teacher,
+                        authors=_split_lines(authors),
+                        authorization_note=authorization_note,
+                    )
+                    st.session_state["academy_selected_paper_id"] = (
+                        result.record.paper_id
+                    )
+                    if result.duplicate:
+                        st.info("检测到相同 SHA-256，已关联已有论文，没有重复保存。")
+                    else:
+                        st.success("PDF 已保存到本地隔离目录并登记，等待后续解析。")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"上传失败，可修复后重试：{exc}")
+
+
+def _render_metadata_editor(catalog: PaperCatalog, record: PaperRecord) -> None:
+    with st.expander("基础信息与授权", expanded=False):
+        token = record.updated_at
+        with st.form(f"paper_metadata_{record.paper_id}_{token}"):
+            title = st.text_input("论文题名", value=record.title)
+            teacher = st.text_input("导师", value=record.teacher)
+            authors = st.text_area("作者（每行一位）", value="\n".join(record.authors))
+            institution_column, college_column = st.columns(2)
+            institution = institution_column.text_input("院校", value=record.institution)
+            college = college_column.text_input("学院", value=record.college)
+            year = st.number_input(
+                "年份（0 表示未知）",
+                min_value=0,
+                max_value=2200,
+                value=record.year or 0,
+                step=1,
+            )
+            direction = st.text_input("主研究方向", value=record.direction)
+            keywords = st.text_area("关键词（每行一个）", value="\n".join(record.keywords))
+            authorization_note = st.text_area(
+                "授权/使用说明", value=record.authorization_note
+            )
+            saved = st.form_submit_button("保存基础信息", type="primary")
+        if saved:
+            try:
+                catalog.update_metadata(
+                    record.paper_id,
+                    title=title,
+                    teacher=teacher,
+                    authors=_split_lines(authors),
+                    institution=institution,
+                    college=college,
+                    year=_optional_year(int(year)),
+                    direction=direction,
+                    keywords=_split_lines(keywords),
+                    authorization_note=authorization_note,
+                )
+                st.success("基础信息已保存。")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"保存失败：{exc}")
+
+
+def _render_tag_editor(catalog: PaperCatalog, record: PaperRecord) -> list[PaperTag]:
+    tags = catalog.list_tags(record.paper_id)
+    st.markdown("#### 多层标签审核")
+    st.caption("自动标签只给建议；修改审核状态后保存。已驳回标签不参与检索。")
+    rows = [
+        {
+            "tag_id": tag.tag_id,
+            "类别": CATEGORY_LABELS.get(tag.category, tag.category),
+            "标签": tag.value,
+            "来源": tag.source,
+            "置信度": tag.confidence,
+            "审核状态": tag.review_status,
+            "依据": tag.evidence,
+        }
+        for tag in tags
+    ]
+    edited = st.data_editor(
+        rows,
+        hide_index=True,
+        width="stretch",
+        disabled=["tag_id", "类别", "标签", "来源", "置信度", "依据"],
+        column_order=["类别", "标签", "来源", "置信度", "审核状态", "依据"],
+        column_config={
+            "置信度": st.column_config.ProgressColumn(
+                "置信度", min_value=0.0, max_value=1.0, format="percent"
+            ),
+            "审核状态": st.column_config.SelectboxColumn(
+                "审核状态", options=sorted(TAG_REVIEW_STATUSES), required=True
+            ),
+        },
+        key=f"paper_tags_{record.paper_id}_{record.updated_at}",
+    )
+    if st.button("保存标签审核", icon=":material/fact_check:"):
+        try:
+            by_id = {tag.tag_id: tag for tag in tags}
+            for row in edited:
+                tag_id = row["tag_id"]
+                if row["审核状态"] != by_id[tag_id].review_status:
+                    catalog.review_tag(tag_id, row["审核状态"])
+            st.success("标签审核状态已保存。")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"保存标签失败：{exc}")
+
+    with st.form(f"custom_tag_{record.paper_id}"):
+        category_column, value_column = st.columns([1, 2])
+        category = category_column.selectbox(
+            "类别",
+            sorted(TAG_CATEGORIES),
+            format_func=lambda value: CATEGORY_LABELS.get(value, value),
+        )
+        value = value_column.text_input("人工标签")
+        add_tag = st.form_submit_button("新增并确认")
+    if add_tag:
+        try:
+            catalog.upsert_tag(
+                PaperTag(
+                    paper_id=record.paper_id,
+                    category=category,
+                    value=value,
+                    source="user",
+                    confidence=1.0,
+                    review_status="confirmed",
+                    evidence="用户在院校端工作台确认",
+                )
+            )
+            st.success("人工标签已确认。")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"新增标签失败：{exc}")
+    return tags
+
+
+def _render_analysis_actions(record: PaperRecord) -> None:
+    st.markdown("#### 论文分析任务")
+    ready = record.ingestion_status in {"parsed", "indexed"}
+    with st.container(horizontal=True):
+        st.button("论文精读总结", disabled=not ready)
+        st.button("技术路线提取", disabled=not ready)
+        st.button("产业转化分析", disabled=not ready)
+    if not ready:
+        st.info(
+            "这篇论文目前只完成目录登记。先完成文本解析/索引，随后才会启用精读、"
+            "路线和转化分析；系统不会仅凭文件名编造结论。"
+        )
+    else:
+        st.caption("任务输出将在后续纵切中接入证据页码、人工审核和报告版本。")
+
+
+def _render_pdf_preview(record: PaperRecord) -> None:
+    path = Path(record.file_path)
+    if not path.is_file():
+        st.warning("本地 PDF 路径已失效，请重新同步来源目录。")
+        return
+    if importlib.util.find_spec("streamlit_pdf") is None:
+        st.info("PDF 在线预览依赖尚未安装；论文仍保存在本机，目录与标签功能不受影响。")
+        return
+    st.pdf(path, height=680, key=f"pdf_{record.paper_id}")
+
+
+def render_academy_page() -> None:
+    st.title("院校端 · 论文成果工作台")
+    st.caption("本地论文库、可审核标签、精读与成果转化分析的统一入口。")
+    database_path = _catalog_path()
+    library_root = _library_root()
+    try:
+        catalog = get_paper_catalog(database_path)
+        service = get_library_service(database_path)
+    except Exception as exc:
+        st.error(f"论文目录数据库无法打开：{exc}")
+        st.stop()
+
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("论文总数", catalog.count())
+    metric_columns[1].metric("待审核标签", catalog.count_tags(review_status="suggested"))
+    metric_columns[2].metric("已确认标签", catalog.count_tags(review_status="confirmed"))
+    metric_columns[3].metric("本地来源目录", "可用" if library_root.is_dir() else "未配置")
+
+    left, center, right = st.columns([0.32, 0.43, 0.30], gap="medium")
+    with left:
+        st.subheader("论文来源库")
+        action_columns = st.columns(2)
+        with action_columns[0]:
+            _render_sync_panel(service, library_root)
+        with action_columns[1]:
+            _render_upload_panel(service)
+        query = st.text_input(
+            "搜索导师、作者、题名或标签",
+            placeholder="支持模糊搜索",
+            key="academy_search_query",
+        )
+        status = st.selectbox(
+            "处理状态",
+            options=[""] + sorted(INGESTION_STATUSES),
+            format_func=lambda value: "全部状态" if not value else STATUS_LABELS[value],
+            key="academy_status_filter",
+        )
+        total = catalog.count_search(query=query, ingestion_status=status)
+        page_count = max(1, math.ceil(total / PAGE_SIZE))
+        page = st.pagination(
+            page_count,
+            key="academy_page_number",
+            max_visible_pages=5,
+            width="stretch",
+        )
+        records = catalog.search(
+            query=query,
+            ingestion_status=status,
+            limit=PAGE_SIZE,
+            offset=(page - 1) * PAGE_SIZE,
+        )
+        st.caption(f"匹配 {total} 篇；当前第 {page}/{page_count} 页")
+        table_rows = [
+            {
+                "导师": record.teacher or "待补充",
+                "题名": record.title,
+                "状态": STATUS_LABELS.get(record.ingestion_status, record.ingestion_status),
+            }
+            for record in records
+        ]
+        selection = st.dataframe(
+            table_rows,
+            hide_index=True,
+            width="stretch",
+            height=590,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="academy_paper_table",
+        )
+        if selection.selection.rows:
+            st.session_state["academy_selected_paper_id"] = records[
+                selection.selection.rows[0]
+            ].paper_id
+
+    selected_id = st.session_state.get("academy_selected_paper_id")
+    selected = catalog.get(selected_id) if selected_id else None
+    with center:
+        st.subheader("论文工作台")
+        if selected is None:
+            st.info("请先从左侧选择一篇论文。")
+        else:
+            st.markdown(f"### {selected.title}")
+            st.caption(
+                f"导师：{selected.teacher or '待补充'} · "
+                f"状态：{STATUS_LABELS.get(selected.ingestion_status, selected.ingestion_status)} · "
+                f"ID：{selected.paper_id[:12]}"
+            )
+            _render_metadata_editor(catalog, selected)
+            tags = _render_tag_editor(catalog, selected)
+            _render_analysis_actions(selected)
+
+    with right:
+        st.subheader("报告与原文预览")
+        if selected is None:
+            st.info("选择论文后在这里预览标签报告和 PDF 原文。")
+        else:
+            tags = catalog.list_tags(selected.paper_id)
+            preview_mode = st.segmented_control(
+                "预览内容",
+                ["目录报告", "PDF 原文"],
+                default="目录报告",
+                required=True,
+                label_visibility="collapsed",
+                width="stretch",
+            )
+            if preview_mode == "PDF 原文":
+                _render_pdf_preview(selected)
+            else:
+                report = _report_markdown(selected, tags)
+                with st.container(border=True, height=620):
+                    st.markdown(report)
+                st.download_button(
+                    "下载 Markdown 目录报告",
+                    data=report,
+                    file_name=f"paper_{selected.paper_id[:12]}_catalog.md",
+                    mime="text/markdown",
+                    width="stretch",
+                )

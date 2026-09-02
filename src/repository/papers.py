@@ -21,11 +21,29 @@ WINDOWS_CATALOG_ALIAS = (
     else DEFAULT_CATALOG_PATH
 )
 DEFAULT_METADATA_SEED_PATH = PROJECT_ROOT / "config" / "paper_metadata.seed.json"
-CATALOG_SCHEMA_VERSION = 1
+CATALOG_SCHEMA_VERSION = 2
 INGESTION_STATUSES = frozenset(
     {"discovered", "metadata_pending", "parsing", "parsed", "indexed", "failed"}
 )
 SOURCE_TYPES = frozenset({"local", "upload", "sample"})
+TAG_CATEGORIES = frozenset(
+    {
+        "research_direction",
+        "material",
+        "device",
+        "method",
+        "metric",
+        "application",
+        "teacher",
+        "author",
+        "year",
+        "custom",
+    }
+)
+TAG_SOURCES = frozenset(
+    {"metadata", "filename_rule", "content_rule", "model", "user"}
+)
+TAG_REVIEW_STATUSES = frozenset({"suggested", "confirmed", "rejected"})
 
 
 def utc_now() -> str:
@@ -55,8 +73,11 @@ class PaperRecord:
     title: str
     authors: tuple[str, ...] = field(default_factory=tuple)
     teacher: str = ""
+    institution: str = ""
+    college: str = ""
     year: int | None = None
     direction: str = "unclassified"
+    keywords: tuple[str, ...] = field(default_factory=tuple)
     page_count: int | None = None
     file_size_bytes: int | None = None
     source_type: str = "local"
@@ -89,15 +110,57 @@ class PaperRecord:
     def to_public_dict(self) -> dict[str, Any]:
         value = asdict(self)
         value["authors"] = list(self.authors)
+        value["keywords"] = list(self.keywords)
         return value
+
+
+@dataclass(frozen=True)
+class PaperTag:
+    """A reviewable paper tag with provenance instead of a hidden label."""
+
+    paper_id: str
+    category: str
+    value: str
+    source: str = "filename_rule"
+    confidence: float = 0.5
+    review_status: str = "suggested"
+    evidence: str = ""
+    tag_id: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+
+    def validate(self) -> None:
+        if not self.paper_id or not self.value.strip():
+            raise ValueError("paper_id 和标签值不能为空")
+        if self.category not in TAG_CATEGORIES:
+            raise ValueError(f"未知标签类别：{self.category}")
+        if self.source not in TAG_SOURCES:
+            raise ValueError(f"未知标签来源：{self.source}")
+        if self.review_status not in TAG_REVIEW_STATUSES:
+            raise ValueError(f"未知标签审核状态：{self.review_status}")
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError("标签置信度必须在 0–1 之间")
+
+    @property
+    def normalized_value(self) -> str:
+        return " ".join(self.value.casefold().split())
+
+    def stable_id(self) -> str:
+        if self.tag_id:
+            return self.tag_id
+        identity = "\x1f".join(
+            (self.paper_id, self.category, self.normalized_value, self.source)
+        )
+        return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 
 class PaperCatalog:
     """Store searchable paper metadata separately from the vector database."""
 
-    def __init__(self, database_path: Path = DEFAULT_CATALOG_PATH) -> None:
-        self.database_path = Path(database_path)
-        uses_windows_alias = os.name == "nt" and self.database_path == DEFAULT_CATALOG_PATH
+    def __init__(self, database_path: Path | None = None) -> None:
+        explicit_path = database_path is not None
+        self.database_path = Path(database_path or DEFAULT_CATALOG_PATH)
+        uses_windows_alias = os.name == "nt" and not explicit_path
         self.access_path = (
             WINDOWS_CATALOG_ALIAS if uses_windows_alias else self.database_path
         )
@@ -132,8 +195,11 @@ class PaperCatalog:
                     title TEXT NOT NULL,
                     authors_json TEXT NOT NULL DEFAULT '[]',
                     teacher TEXT NOT NULL DEFAULT '',
+                    institution TEXT NOT NULL DEFAULT '',
+                    college TEXT NOT NULL DEFAULT '',
                     year INTEGER,
                     direction TEXT NOT NULL DEFAULT 'unclassified',
+                    keywords_json TEXT NOT NULL DEFAULT '[]',
                     page_count INTEGER,
                     file_size_bytes INTEGER,
                     source_type TEXT NOT NULL,
@@ -150,8 +216,49 @@ class PaperCatalog:
                 CREATE INDEX IF NOT EXISTS idx_papers_direction ON papers(direction);
                 CREATE INDEX IF NOT EXISTS idx_papers_status ON papers(ingestion_status);
                 CREATE INDEX IF NOT EXISTS idx_papers_title ON papers(title);
+                CREATE TABLE IF NOT EXISTS paper_tags (
+                    tag_id TEXT PRIMARY KEY,
+                    paper_id TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    normalized_value TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    confidence REAL NOT NULL,
+                    review_status TEXT NOT NULL,
+                    evidence TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(paper_id) REFERENCES papers(paper_id) ON DELETE CASCADE,
+                    UNIQUE(paper_id, category, normalized_value, source)
+                );
+                CREATE INDEX IF NOT EXISTS idx_paper_tags_paper ON paper_tags(paper_id);
+                CREATE INDEX IF NOT EXISTS idx_paper_tags_lookup
+                    ON paper_tags(category, normalized_value, review_status);
+                CREATE TABLE IF NOT EXISTS paper_sources (
+                    source_path TEXT PRIMARY KEY,
+                    paper_id TEXT NOT NULL,
+                    file_size_bytes INTEGER NOT NULL,
+                    modified_time_ns INTEGER NOT NULL,
+                    last_seen_at TEXT NOT NULL,
+                    FOREIGN KEY(paper_id) REFERENCES papers(paper_id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_paper_sources_paper
+                    ON paper_sources(paper_id);
                 """
             )
+            existing_columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(papers)").fetchall()
+            }
+            for column, definition in (
+                ("institution", "TEXT NOT NULL DEFAULT ''"),
+                ("college", "TEXT NOT NULL DEFAULT ''"),
+                ("keywords_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ):
+                if column not in existing_columns:
+                    connection.execute(
+                        f"ALTER TABLE papers ADD COLUMN {column} {definition}"
+                    )
             connection.execute(f"PRAGMA user_version = {CATALOG_SCHEMA_VERSION}")
 
     @staticmethod
@@ -164,8 +271,11 @@ class PaperCatalog:
             title=row["title"],
             authors=tuple(json.loads(row["authors_json"])),
             teacher=row["teacher"],
+            institution=row["institution"],
+            college=row["college"],
             year=row["year"],
             direction=row["direction"],
+            keywords=tuple(json.loads(row["keywords_json"])),
             page_count=row["page_count"],
             file_size_bytes=row["file_size_bytes"],
             source_type=row["source_type"],
@@ -187,6 +297,7 @@ class PaperCatalog:
             **{
                 **record.to_public_dict(),
                 "authors": tuple(record.authors),
+                "keywords": tuple(record.keywords),
                 "created_at": created_at,
                 "updated_at": now,
             }
@@ -196,18 +307,22 @@ class PaperCatalog:
                 """
                 INSERT INTO papers (
                     paper_id, sha256, file_name, file_path, title, authors_json,
-                    teacher, year, direction, page_count, file_size_bytes,
+                    teacher, institution, college, year, direction, keywords_json,
+                    page_count, file_size_bytes,
                     source_type, ingestion_status, parser_version, pipeline_version,
                     authorization_note, error_message, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(paper_id) DO UPDATE SET
                     file_name=excluded.file_name,
                     file_path=excluded.file_path,
                     title=excluded.title,
                     authors_json=excluded.authors_json,
                     teacher=excluded.teacher,
+                    institution=excluded.institution,
+                    college=excluded.college,
                     year=excluded.year,
                     direction=excluded.direction,
+                    keywords_json=excluded.keywords_json,
                     page_count=excluded.page_count,
                     file_size_bytes=excluded.file_size_bytes,
                     source_type=excluded.source_type,
@@ -226,8 +341,11 @@ class PaperCatalog:
                     updated.title,
                     json.dumps(updated.authors, ensure_ascii=False),
                     updated.teacher,
+                    updated.institution,
+                    updated.college,
                     updated.year,
                     updated.direction,
+                    json.dumps(updated.keywords, ensure_ascii=False),
                     updated.page_count,
                     updated.file_size_bytes,
                     updated.source_type,
@@ -249,8 +367,11 @@ class PaperCatalog:
         title: str | None = None,
         authors: Iterable[str] = (),
         teacher: str = "",
+        institution: str = "",
+        college: str = "",
         year: int | None = None,
         direction: str = "unclassified",
+        keywords: Iterable[str] = (),
         page_count: int | None = None,
         source_type: str = "local",
         ingestion_status: str = "discovered",
@@ -272,8 +393,11 @@ class PaperCatalog:
             title=(title or path.stem).strip(),
             authors=tuple(value.strip() for value in authors if value.strip()),
             teacher=teacher.strip(),
+            institution=institution.strip(),
+            college=college.strip(),
             year=year,
             direction=direction.strip() or "unclassified",
+            keywords=tuple(value.strip() for value in keywords if value.strip()),
             page_count=page_count,
             file_size_bytes=path.stat().st_size,
             source_type=source_type,
@@ -282,7 +406,44 @@ class PaperCatalog:
             pipeline_version=pipeline_version,
             authorization_note=authorization_note.strip(),
         )
-        return self.upsert(record)
+        registered = self.upsert(record)
+        self.record_source(registered, path)
+        return registered
+
+    def record_source(self, record: PaperRecord, path: Path) -> None:
+        """Remember an unchanged source file so later scans can skip re-hashing it."""
+        path = Path(path).resolve()
+        stat = path.stat()
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO paper_sources (
+                    source_path, paper_id, file_size_bytes, modified_time_ns, last_seen_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(source_path) DO UPDATE SET
+                    paper_id=excluded.paper_id,
+                    file_size_bytes=excluded.file_size_bytes,
+                    modified_time_ns=excluded.modified_time_ns,
+                    last_seen_at=excluded.last_seen_at
+                """,
+                (str(path), record.paper_id, stat.st_size, stat.st_mtime_ns, utc_now()),
+            )
+
+    def source_paper_id(self, path: Path) -> str | None:
+        """Return a cached paper ID only when size and modification time still match."""
+        path = Path(path).resolve()
+        if not path.is_file():
+            return None
+        stat = path.stat()
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT paper_id FROM paper_sources
+                WHERE source_path = ? AND file_size_bytes = ? AND modified_time_ns = ?
+                """,
+                (str(path), stat.st_size, stat.st_mtime_ns),
+            ).fetchone()
+        return str(row["paper_id"]) if row else None
 
     def get(self, paper_id: str) -> PaperRecord | None:
         with self._connect() as connection:
@@ -293,7 +454,138 @@ class PaperCatalog:
 
     def count(self) -> int:
         with self._connect() as connection:
-            return int(connection.execute("SELECT COUNT(*) FROM papers").fetchone()[0])
+            return int(
+                connection.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
+            )
+
+    @staticmethod
+    def _tag_from_row(row: sqlite3.Row) -> PaperTag:
+        return PaperTag(
+            tag_id=row["tag_id"],
+            paper_id=row["paper_id"],
+            category=row["category"],
+            value=row["value"],
+            source=row["source"],
+            confidence=float(row["confidence"]),
+            review_status=row["review_status"],
+            evidence=row["evidence"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    def upsert_tag(self, tag: PaperTag) -> PaperTag:
+        tag.validate()
+        if self.get(tag.paper_id) is None:
+            raise KeyError(f"论文不存在：{tag.paper_id}")
+        tag_id = tag.stable_id()
+        now = utc_now()
+        with self._connect() as connection:
+            existing = connection.execute(
+                "SELECT created_at FROM paper_tags WHERE tag_id = ?", (tag_id,)
+            ).fetchone()
+            created_at = (
+                str(existing["created_at"]) if existing else (tag.created_at or now)
+            )
+            connection.execute(
+                """
+                INSERT INTO paper_tags (
+                    tag_id, paper_id, category, value, normalized_value, source,
+                    confidence, review_status, evidence, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(tag_id) DO UPDATE SET
+                    value=excluded.value,
+                    confidence=excluded.confidence,
+                    review_status=excluded.review_status,
+                    evidence=excluded.evidence,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    tag_id,
+                    tag.paper_id,
+                    tag.category,
+                    tag.value.strip(),
+                    tag.normalized_value,
+                    tag.source,
+                    float(tag.confidence),
+                    tag.review_status,
+                    tag.evidence.strip(),
+                    created_at,
+                    now,
+                ),
+            )
+        return replace(tag, tag_id=tag_id, created_at=created_at, updated_at=now)
+
+    def list_tags(
+        self,
+        paper_id: str,
+        *,
+        include_rejected: bool = True,
+    ) -> list[PaperTag]:
+        clause = "" if include_rejected else " AND review_status <> 'rejected'"
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM paper_tags WHERE paper_id = ?"
+                + clause
+                + " ORDER BY category, value, source",
+                (paper_id,),
+            ).fetchall()
+        return [self._tag_from_row(row) for row in rows]
+
+    def review_tag(self, tag_id: str, review_status: str) -> PaperTag:
+        if review_status not in TAG_REVIEW_STATUSES:
+            raise ValueError(f"未知标签审核状态：{review_status}")
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM paper_tags WHERE tag_id = ?", (tag_id,)
+            ).fetchone()
+        if row is None:
+            raise KeyError(f"标签不存在：{tag_id}")
+        return self.upsert_tag(
+            replace(self._tag_from_row(row), review_status=review_status)
+        )
+
+    def count_tags(self, *, review_status: str = "") -> int:
+        if review_status and review_status not in TAG_REVIEW_STATUSES:
+            raise ValueError(f"未知标签审核状态：{review_status}")
+        query = "SELECT COUNT(*) FROM paper_tags"
+        params: tuple[str, ...] = ()
+        if review_status:
+            query += " WHERE review_status = ?"
+            params = (review_status,)
+        with self._connect() as connection:
+            return int(connection.execute(query, params).fetchone()[0])
+
+    def update_metadata(
+        self,
+        paper_id: str,
+        *,
+        title: str,
+        authors: Iterable[str],
+        teacher: str,
+        institution: str,
+        college: str,
+        year: int | None,
+        direction: str,
+        keywords: Iterable[str],
+        authorization_note: str,
+    ) -> PaperRecord:
+        existing = self.get(paper_id)
+        if existing is None:
+            raise KeyError(f"论文不存在：{paper_id}")
+        return self.upsert(
+            replace(
+                existing,
+                title=title.strip(),
+                authors=tuple(value.strip() for value in authors if value.strip()),
+                teacher=teacher.strip(),
+                institution=institution.strip(),
+                college=college.strip(),
+                year=year,
+                direction=direction.strip() or "unclassified",
+                keywords=tuple(value.strip() for value in keywords if value.strip()),
+                authorization_note=authorization_note.strip(),
+            )
+        )
 
     def update_ingestion_status(
         self,
@@ -336,6 +628,9 @@ class PaperCatalog:
         title: str = "",
         direction: str = "",
         ingestion_status: str = "",
+        year: int | None = None,
+        keyword: str = "",
+        tag: str = "",
         limit: int = 50,
         offset: int = 0,
     ) -> list[PaperRecord]:
@@ -346,24 +641,16 @@ class PaperCatalog:
         if ingestion_status and ingestion_status not in INGESTION_STATUSES:
             raise ValueError(f"未知 ingestion_status：{ingestion_status}")
 
-        clauses: list[str] = []
-        params: list[Any] = []
-        if query.strip():
-            pattern = f"%{query.strip()}%"
-            clauses.append(
-                "(title LIKE ? OR teacher LIKE ? OR file_name LIKE ? OR authors_json LIKE ?)"
-            )
-            params.extend([pattern, pattern, pattern, pattern])
-        for column, value in (
-            ("teacher", teacher),
-            ("title", title),
-            ("direction", direction),
-            ("ingestion_status", ingestion_status),
-        ):
-            if value.strip():
-                clauses.append(f"{column} LIKE ?")
-                params.append(f"%{value.strip()}%")
-        where_sql = " WHERE " + " AND ".join(clauses) if clauses else ""
+        where_sql, params = self._search_filter(
+            query=query,
+            teacher=teacher,
+            title=title,
+            direction=direction,
+            ingestion_status=ingestion_status,
+            year=year,
+            keyword=keyword,
+            tag=tag,
+        )
         sql = (
             "SELECT * FROM papers"
             + where_sql
@@ -373,6 +660,84 @@ class PaperCatalog:
         with self._connect() as connection:
             rows = connection.execute(sql, params).fetchall()
         return [self._from_row(row) for row in rows]
+
+    @staticmethod
+    def _search_filter(
+        *,
+        query: str = "",
+        teacher: str = "",
+        title: str = "",
+        direction: str = "",
+        ingestion_status: str = "",
+        year: int | None = None,
+        keyword: str = "",
+        tag: str = "",
+    ) -> tuple[str, list[Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if query.strip():
+            pattern = f"%{query.strip()}%"
+            clauses.append(
+                "(title LIKE ? OR teacher LIKE ? OR file_name LIKE ? OR "
+                "authors_json LIKE ? OR keywords_json LIKE ? OR EXISTS ("
+                "SELECT 1 FROM paper_tags pt WHERE pt.paper_id = papers.paper_id "
+                "AND pt.review_status <> 'rejected' AND pt.value LIKE ?))"
+            )
+            params.extend([pattern, pattern, pattern, pattern, pattern, pattern])
+        for column, value in (
+            ("teacher", teacher),
+            ("title", title),
+            ("direction", direction),
+            ("ingestion_status", ingestion_status),
+        ):
+            if value.strip():
+                clauses.append(f"{column} LIKE ?")
+                params.append(f"%{value.strip()}%")
+        if year is not None:
+            clauses.append("year = ?")
+            params.append(int(year))
+        if keyword.strip():
+            clauses.append("keywords_json LIKE ?")
+            params.append(f"%{keyword.strip()}%")
+        if tag.strip():
+            clauses.append(
+                "EXISTS (SELECT 1 FROM paper_tags pt WHERE pt.paper_id = papers.paper_id "
+                "AND pt.review_status <> 'rejected' AND pt.value LIKE ?)"
+            )
+            params.append(f"%{tag.strip()}%")
+        where_sql = " WHERE " + " AND ".join(clauses) if clauses else ""
+        return where_sql, params
+
+    def count_search(
+        self,
+        query: str = "",
+        *,
+        teacher: str = "",
+        title: str = "",
+        direction: str = "",
+        ingestion_status: str = "",
+        year: int | None = None,
+        keyword: str = "",
+        tag: str = "",
+    ) -> int:
+        if ingestion_status and ingestion_status not in INGESTION_STATUSES:
+            raise ValueError(f"未知 ingestion_status：{ingestion_status}")
+        where_sql, params = self._search_filter(
+            query=query,
+            teacher=teacher,
+            title=title,
+            direction=direction,
+            ingestion_status=ingestion_status,
+            year=year,
+            keyword=keyword,
+            tag=tag,
+        )
+        with self._connect() as connection:
+            return int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM papers" + where_sql, params
+                ).fetchone()[0]
+            )
 
     def all_records(self) -> list[PaperRecord]:
         """Return the complete catalog without imposing an interactive-search cap."""
