@@ -11,6 +11,8 @@
 - 本地解析 PDF 文本并按页码切分 Chunk
 - 使用 `BAAI/bge-small-zh-v1.5` 在 CPU 或 NVIDIA GPU 上生成本地 Embedding
 - 使用 ChromaDB 保存和检索论文证据
+- 按“元数据优先、规则其次、未识别保留”的策略标注研究方向
+- 在本地抽取 13 类高频性能指标，保留原值、规范单位、测试条件、证据等级和页码/Chunk
 - 从论文证据生成可回溯的科研能力与教师画像
 - 将企业原始需求解析为结构化需求、量化指标、测试条件、已有基础和排除路线
 - 在网页中逐项修改解析结果，按不可覆盖的 JSON 快照保存、恢复本地历史版本
@@ -62,7 +64,14 @@ python scripts/sync_paper_catalog.py
 python src/retrieval/vector_store.py
 ```
 
-4. 能力抽取会把选中的论文片段发送到 `.env` 配置的 Moonshot 接口。先预览，确认范围后再明确执行发送：
+4. 在本地预览并生成可追溯指标记录；该步骤不调用 Moonshot：
+
+```powershell
+python src/extraction/metric_extractor.py --preview-only
+python src/extraction/metric_extractor.py
+```
+
+5. 能力抽取会把选中的论文片段发送到 `.env` 配置的 Moonshot 接口。先预览，确认范围后再明确执行发送：
 
 ```powershell
 python src/extraction/capability_extractor.py
@@ -70,8 +79,8 @@ python src/extraction/capability_extractor.py --send-to-moonshot
 python src/extraction/teacher_profiler.py
 ```
 
-5. 双击网页启动脚本，输入企业真实需求；也可以先载入带公开来源的“江西电缆”验收案例。
-6. 按“系统解析 → 逐项修改 → 保存版本 → 确认已保存版本 → 生成方案”完成企业端流程。未保存的页面修改不会进入方案生成。
+6. 双击网页启动脚本，输入企业真实需求；也可以先载入带公开来源的“江西电缆”验收案例。
+7. 按“系统解析 → 逐项修改 → 保存版本 → 确认已保存版本 → 生成方案”完成企业端流程。未保存的页面修改不会进入方案生成。
 
 ## Moonshot/Kimi 配置
 
@@ -93,6 +102,10 @@ MOONSHOT_MODEL=kimi-k3
 # 运行全部离线测试
 python -m unittest discover -s tests -v
 
+# 仅在本地预览/保存论文指标，不调用外部 API
+python src/extraction/metric_extractor.py --preview-only
+python src/extraction/metric_extractor.py
+
 # 运行企业端 P1 工作流；只有显式确认后才通过方案确认闸门
 python src/agents/workflow.py --text "企业需求原话" --confirm-requirement
 
@@ -110,7 +123,7 @@ python -m streamlit run app/app.py
 - `.env` 与 Moonshot API Key
 - `data/raw/` 中的论文原文
 - `data/vector_db/` 与 Windows 用户目录中的本地 ChromaDB
-- 能力记录、教师画像、企业需求、匹配结果和 Agent 运行记录
+- 指标记录、能力记录、教师画像、企业需求、匹配结果和 Agent 运行记录
 - 下载的本地模型缓存
 
 公开前仍应执行一次敏感信息扫描，并确保拥有论文和企业数据的处理权限。
@@ -137,6 +150,7 @@ docs/                 安装、验收与版本说明
 
 - 真实论文数据未包含在仓库中，需要使用者自行导入并确认版权和授权。
 - 当前 PDF 流程主要处理文本，不解析论文图片、复杂表格或扫描页 OCR。
+- 当前指标抽取是规则/词典确定性通道；重复论述可能保留为多条证据，复杂并列关系、图表数值和语义补充仍需人工复核或后续可选模型通道。
 - 工程成熟度、成本、知识产权、法规和安全在缺少调查材料时保持“未知”，需要专业人员复核。
 - 当前企业端只输出证据足够支撑的方案数量；不会为了界面完整而固定凑出三个方案。
 - 江西电缆案例来自公开“揭榜挂帅”榜单摘要，仅验收软件流程；不代表项目获得企业委托，也不构成对匹配教师或方案可行性的人工金标准结论。
@@ -147,7 +161,7 @@ docs/                 安装、验收与版本说明
 - `v0.1.0`：首次可运行的本地 MVP。
 - `v0.1.1`：增加双语文档、MIT 许可证、通用 Windows 安装/启动器和合成示例数据。
 - `v0.1.2`：增强 PDF 上下标保真、章节感知切块、SQLite 论文目录、版本化向量集合和检索评测。
-- `master` 开发检查点：企业端 P1 核心闭环；支持需求解析、逐项编辑、不可覆盖的本地版本、确认冻结、模块级检索及方案/路线/评估/落地报告闭环。
+- `master` 开发检查点：企业端 P1 核心闭环，以及方向分流、13 项指标本体、单位归一、证据等级和本地确定性指标抽取底座。
 
 ## 许可证
 

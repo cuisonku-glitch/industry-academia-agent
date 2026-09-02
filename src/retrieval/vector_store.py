@@ -141,6 +141,8 @@ class PaperVectorStore:
                     "author": metadata.get("author", ""),
                     "teacher": metadata.get("teacher", ""),
                     "year": metadata.get("year"),
+                    "direction": metadata.get("direction", "unclassified"),
+                    "paper_id": metadata.get("paper_id", ""),
                 }
         return [papers_by_file[name] for name in sorted(papers_by_file)]
 

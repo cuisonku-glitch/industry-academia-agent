@@ -1,0 +1,46 @@
+{
+  "schema_version": "research_direction_taxonomy_v1",
+  "directions": [
+    {
+      "direction_id": "x_ray_detector",
+      "label": "X射线直接探测",
+      "aliases": ["x_ray_detector", "x-ray detector", "X射线探测器"],
+      "keywords": [
+        "X射线探测器",
+        "X 射线探测器",
+        "直接型探测器",
+        "钙钛矿探测器",
+        "探测灵敏度",
+        "暗电流",
+        "检测限"
+      ]
+    },
+    {
+      "direction_id": "x_ray_imaging",
+      "label": "X射线成像与闪烁体",
+      "aliases": ["x_ray_imaging", "x-ray imaging", "X射线成像"],
+      "keywords": [
+        "X射线成像",
+        "X 射线成像",
+        "像素化闪烁体",
+        "闪烁体",
+        "空间分辨率",
+        "光产额",
+        "成像性能"
+      ]
+    },
+    {
+      "direction_id": "optoelectronic_detector",
+      "label": "光电探测",
+      "aliases": ["optoelectronic_detector", "photodetector", "光电探测器"],
+      "keywords": [
+        "光电探测器",
+        "光探测器",
+        "光响应度",
+        "比探测率",
+        "光电流",
+        "响应时间"
+      ]
+    }
+  ]
+}
