@@ -1,0 +1,164 @@
+{
+  "schema_version": "metric_ontology_v1",
+  "evidence_levels": ["measured", "reported", "inferred"],
+  "metrics": [
+    {
+      "metric_id": "sensitivity",
+      "canonical_name": "X射线探测灵敏度",
+      "scope": "direction",
+      "directions": ["x_ray_detector"],
+      "aliases": ["灵敏度", "探测灵敏度", "sensitivity"],
+      "canonical_unit": "μC Gy_air^{-1} cm^{-2}",
+      "units": [
+        {"symbol": "μC Gy_air^{-1} cm^{-2}", "aliases": ["μC Gyair^{-1} cm^{-2}", "μC Gyair^-1 cm^-2", "μC/Gyair/cm²", "μC Gy^{-1} cm^{-2}"], "scale": 1.0},
+        {"symbol": "mC Gy_air^{-1} cm^{-2}", "aliases": ["mC Gyair^{-1} cm^{-2}", "mC Gyair^-1 cm^-2"], "scale": 1000.0},
+        {"symbol": "nC Gy_air^{-1} cm^{-2}", "aliases": ["nC Gyair^{-1} cm^{-2}", "nC Gyair^-1 cm^-2"], "scale": 0.001}
+      ]
+    },
+    {
+      "metric_id": "detection_limit",
+      "canonical_name": "X射线检测限",
+      "scope": "direction",
+      "directions": ["x_ray_detector", "x_ray_imaging"],
+      "aliases": ["检测限", "探测低限", "最小检测限", "LOD", "LoD"],
+      "canonical_unit": "nGy_air s^{-1}",
+      "units": [
+        {"symbol": "nGy_air s^{-1}", "aliases": ["nGyair s^{-1}", "nGyair s^-1", "nGyₐᵢᵣs^{-1}", "nGy/s"], "scale": 1.0},
+        {"symbol": "μGy_air s^{-1}", "aliases": ["μGyair s^{-1}", "μGyair s^-1", "μGy/s"], "scale": 1000.0},
+        {"symbol": "mGy_air s^{-1}", "aliases": ["mGyair s^{-1}", "mGyair s^-1", "mGy/s"], "scale": 1000000.0}
+      ]
+    },
+    {
+      "metric_id": "response_time",
+      "canonical_name": "响应时间",
+      "scope": "general",
+      "directions": [],
+      "aliases": ["响应时间", "上升时间", "下降时间", "rise time", "decay time"],
+      "canonical_unit": "ms",
+      "units": [
+        {"symbol": "ms", "aliases": ["ms", "毫秒"], "scale": 1.0},
+        {"symbol": "μs", "aliases": ["μs", "µs", "us", "微秒"], "scale": 0.001},
+        {"symbol": "s", "aliases": ["s", "秒"], "scale": 1000.0}
+      ]
+    },
+    {
+      "metric_id": "spatial_resolution",
+      "canonical_name": "空间分辨率",
+      "scope": "direction",
+      "directions": ["x_ray_imaging", "x_ray_detector"],
+      "aliases": ["空间分辨率", "spatial resolution"],
+      "canonical_unit": "lp mm^{-1}",
+      "units": [
+        {"symbol": "lp mm^{-1}", "aliases": ["lp mm^{-1}", "lp mm^-1", "lp/mm"], "scale": 1.0}
+      ]
+    },
+    {
+      "metric_id": "dark_current_density",
+      "canonical_name": "暗电流密度",
+      "scope": "device_process",
+      "directions": ["x_ray_detector", "optoelectronic_detector"],
+      "aliases": ["暗电流密度", "dark current density"],
+      "canonical_unit": "nA cm^{-2}",
+      "units": [
+        {"symbol": "nA cm^{-2}", "aliases": ["nA cm^{-2}", "nA cm^-2", "nA/cm²"], "scale": 1.0},
+        {"symbol": "pA cm^{-2}", "aliases": ["pA cm^{-2}", "pA cm^-2", "pA/cm²"], "scale": 0.001},
+        {"symbol": "μA cm^{-2}", "aliases": ["μA cm^{-2}", "μA cm^-2", "μA/cm²"], "scale": 1000.0}
+      ]
+    },
+    {
+      "metric_id": "baseline_drift_rate",
+      "canonical_name": "基线漂移率",
+      "scope": "device_process",
+      "directions": ["x_ray_detector"],
+      "aliases": ["基线漂移率", "基线漂移", "baseline drift"],
+      "canonical_unit": "nA cm^{-1} s^{-1} V^{-1}",
+      "units": [
+        {"symbol": "nA cm^{-1} s^{-1} V^{-1}", "aliases": ["nA cm^{-1} s^{-1} V^{-1}", "nA cm^-1 s^-1 V^-1"], "scale": 1.0}
+      ]
+    },
+    {
+      "metric_id": "light_yield",
+      "canonical_name": "闪烁光产额",
+      "scope": "direction",
+      "directions": ["x_ray_imaging"],
+      "aliases": ["光产额", "光产出", "light yield"],
+      "canonical_unit": "photons MeV^{-1}",
+      "units": [
+        {"symbol": "photons MeV^{-1}", "aliases": ["photons/MeV", "photons MeV^{-1}", "ph/MeV"], "scale": 1.0},
+        {"symbol": "photons keV^{-1}", "aliases": ["photons/keV", "photons keV^{-1}", "ph/keV"], "scale": 1000.0}
+      ]
+    },
+    {
+      "metric_id": "plqy",
+      "canonical_name": "光致发光量子效率",
+      "scope": "direction",
+      "directions": ["x_ray_imaging", "optoelectronic_detector"],
+      "aliases": ["光致发光量子效率", "PLQY", "photoluminescence quantum yield"],
+      "canonical_unit": "%",
+      "units": [
+        {"symbol": "%", "aliases": ["%", "％"], "scale": 1.0}
+      ]
+    },
+    {
+      "metric_id": "mobility_lifetime_product",
+      "canonical_name": "载流子迁移率-寿命乘积",
+      "scope": "device_process",
+      "directions": ["x_ray_detector", "optoelectronic_detector"],
+      "aliases": ["迁移率-寿命乘积", "迁移率寿命乘积", "μτ", "mobility-lifetime product"],
+      "canonical_unit": "cm^{2} V^{-1}",
+      "units": [
+        {"symbol": "cm^{2} V^{-1}", "aliases": ["cm^{2} V^{-1}", "cm^2 V^-1", "cm²/V"], "scale": 1.0},
+        {"symbol": "m^{2} V^{-1}", "aliases": ["m^{2} V^{-1}", "m^2 V^-1", "m²/V"], "scale": 10000.0}
+      ]
+    },
+    {
+      "metric_id": "defect_density",
+      "canonical_name": "缺陷密度",
+      "scope": "device_process",
+      "directions": ["x_ray_detector", "optoelectronic_detector"],
+      "aliases": ["缺陷密度", "trap density", "defect density"],
+      "canonical_unit": "cm^{-3}",
+      "units": [
+        {"symbol": "cm^{-3}", "aliases": ["cm^{-3}", "cm^-3", "cm⁻³"], "scale": 1.0}
+      ]
+    },
+    {
+      "metric_id": "thickness",
+      "canonical_name": "厚度",
+      "scope": "general",
+      "directions": [],
+      "aliases": ["厚度", "膜厚", "thickness"],
+      "canonical_unit": "μm",
+      "units": [
+        {"symbol": "μm", "aliases": ["μm", "µm", "um", "微米"], "scale": 1.0},
+        {"symbol": "nm", "aliases": ["nm", "纳米"], "scale": 0.001},
+        {"symbol": "mm", "aliases": ["mm", "毫米"], "scale": 1000.0}
+      ]
+    },
+    {
+      "metric_id": "electric_field",
+      "canonical_name": "工作电场强度",
+      "scope": "device_process",
+      "directions": ["x_ray_detector", "optoelectronic_detector"],
+      "aliases": ["电场强度", "工作电场", "偏置场强", "electric field"],
+      "canonical_unit": "V mm^{-1}",
+      "units": [
+        {"symbol": "V mm^{-1}", "aliases": ["V mm^{-1}", "V mm^-1", "V/mm"], "scale": 1.0},
+        {"symbol": "kV mm^{-1}", "aliases": ["kV mm^{-1}", "kV mm^-1", "kV/mm"], "scale": 1000.0}
+      ]
+    },
+    {
+      "metric_id": "x_ray_energy",
+      "canonical_name": "X射线光子能量",
+      "scope": "general",
+      "directions": [],
+      "aliases": ["X射线能量", "光子能量", "Eph", "photon energy"],
+      "canonical_unit": "keV",
+      "units": [
+        {"symbol": "keV", "aliases": ["keV"], "scale": 1.0},
+        {"symbol": "eV", "aliases": ["eV"], "scale": 0.001},
+        {"symbol": "MeV", "aliases": ["MeV"], "scale": 1000.0}
+      ]
+    }
+  ]
+}

@@ -11,6 +11,8 @@ An evidence-grounded industry–academia transfer prototype. It parses papers lo
 - Local PDF text extraction and page-aware chunking
 - Local `BAAI/bge-small-zh-v1.5` embeddings on CPU or NVIDIA GPU
 - ChromaDB persistence and evidence retrieval
+- Research-direction routing with metadata priority, keyword rules, and an explicit unclassified outcome
+- Local extraction of 13 high-frequency performance metrics with raw and canonical units, conditions, evidence levels, and page/chunk provenance
 - Traceable research-capability extraction and teacher profiling
 - Structured parsing of requirements, target metrics, test conditions, existing foundations, and excluded approaches
 - Field-by-field correction in the web app, with immutable local JSON snapshots and history restore
@@ -62,7 +64,14 @@ python scripts/sync_paper_catalog.py
 python src/retrieval/vector_store.py
 ```
 
-4. Capability extraction sends selected paper excerpts to the Moonshot endpoint configured in `.env`. Preview first, then explicitly approve the API run:
+4. Preview and save traceable metric records locally. This step does not call Moonshot:
+
+```powershell
+python src/extraction/metric_extractor.py --preview-only
+python src/extraction/metric_extractor.py
+```
+
+5. Capability extraction sends selected paper excerpts to the Moonshot endpoint configured in `.env`. Preview first, then explicitly approve the API run:
 
 ```powershell
 python src/extraction/capability_extractor.py
@@ -70,8 +79,8 @@ python src/extraction/capability_extractor.py --send-to-moonshot
 python src/extraction/teacher_profiler.py
 ```
 
-5. Start the web app and enter the enterprise's original wording, or load the sourced public Jiangxi Cable acceptance case.
-6. Complete the enterprise flow: system parse → field-by-field edit → save a version → confirm the saved version → generate the solution. Unsaved UI edits are never sent downstream.
+6. Start the web app and enter the enterprise's original wording, or load the sourced public Jiangxi Cable acceptance case.
+7. Complete the enterprise flow: system parse → field-by-field edit → save a version → confirm the saved version → generate the solution. Unsaved UI edits are never sent downstream.
 
 ## Moonshot/Kimi configuration
 
@@ -93,6 +102,10 @@ Never commit `.env`. The web app sends at most five locally retrieved paper chun
 # Run all offline tests
 python -m unittest discover -s tests -v
 
+# Preview/save local paper metrics without calling an external API
+python src/extraction/metric_extractor.py --preview-only
+python src/extraction/metric_extractor.py
+
 # Run the P1 enterprise workflow; explicit confirmation opens the solution gate
 python src/agents/workflow.py --text "original enterprise requirement" --confirm-requirement
 
@@ -110,7 +123,7 @@ The following paths are excluded by `.gitignore` and are not uploaded by normal 
 - `.env` and the Moonshot API key
 - Raw papers under `data/raw/`
 - ChromaDB data under `data/vector_db/` and the Windows user profile
-- Capability records, teacher profiles, enterprise requests, match results, and Agent run records
+- Metric records, capability records, teacher profiles, enterprise requests, match results, and Agent run records
 - Downloaded local model caches
 
 Always run a secret scan before publishing and confirm that you have permission to process the papers and enterprise data.
@@ -137,6 +150,7 @@ docs/                 Installation, acceptance, and release notes
 
 - Real paper data is not bundled. Users must import authorized content themselves.
 - The current PDF pipeline focuses on text and does not yet interpret figures, complex tables, or scanned-page OCR.
+- Metric extraction currently uses the deterministic rule/dictionary channel. Repeated mentions may remain as separate evidence records; complex enumerations, figure/table values, and semantic supplementation still need human review or a later optional model channel.
 - Engineering maturity, cost, IP, regulatory, and safety dimensions remain unknown until supporting investigation is available.
 - The enterprise workflow emits only as many evidence-supported solutions as it can justify; it does not pad the result to three alternatives.
 - The Jiangxi Cable case is a summary of a public open-challenge notice used to test software behavior. It is not a client engagement and is not a human gold-standard endorsement of any matched teacher or proposed solution.
@@ -147,7 +161,7 @@ docs/                 Installation, acceptance, and release notes
 - `v0.1.0`: first runnable local MVP.
 - `v0.1.1`: bilingual documentation, MIT license, portable Windows setup/launchers, and synthetic sample data.
 - `v0.1.2`: layout-aware PDF parsing, section-aware chunks, SQLite paper catalog, versioned vector collection, and retrieval evaluation.
-- `master` development checkpoint: the P1 enterprise loop with parsing, field-level editing, immutable local versions, confirmation freeze, module retrieval, and solution/route/assessment/landing-report output.
+- `master` development checkpoint: the P1 enterprise loop plus direction routing, a 13-metric ontology, unit normalization, evidence levels, and deterministic local metric extraction.
 
 ## License
 
