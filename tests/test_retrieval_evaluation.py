@@ -22,6 +22,19 @@ class RetrievalEvaluationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "重复"):
                 load_queries(path)
 
+    def test_query_loader_preserves_optional_filters(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            path = Path(temporary_directory) / "queries.jsonl"
+            path.write_text(
+                '{"query_id":"q1","query":"真实问题","filters":'
+                '{"direction":"x_ray_detector"}}\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                load_queries(path)[0]["filters"],
+                {"direction": "x_ray_detector"},
+            )
+
     def setUp(self) -> None:
         self.qrels = [
             {"query_id": "q1", "chunk_id": "a", "relevance": 2},

@@ -13,6 +13,8 @@
 - 使用 ChromaDB 保存和检索论文证据
 - 按“元数据优先、规则其次、未识别保留”的策略标注研究方向
 - 在本地抽取 13 类高频性能指标，保留原值、规范单位、测试条件、证据等级和页码/Chunk
+- 使用同一方向/章节/数值过滤契约运行 Dense、BM25、RRF，并可选接入 CrossEncoder 重排
+- 为每种检索方法保存独立 run、P50/P95 延迟、峰值显存及同 qrels 评测结果
 - 从论文证据生成可回溯的科研能力与教师画像
 - 将企业原始需求解析为结构化需求、量化指标、测试条件、已有基础和排除路线
 - 在网页中逐项修改解析结果，按不可覆盖的 JSON 快照保存、恢复本地历史版本
@@ -106,6 +108,9 @@ python -m unittest discover -s tests -v
 python src/extraction/metric_extractor.py --preview-only
 python src/extraction/metric_extractor.py
 
+# 用同一查询集生成独立 Dense、BM25、RRF run 和实验清单
+python scripts/run_retrieval_eval.py --queries data/evaluation/queries.jsonl --output-dir data/evaluation/runs/experiment-001 --methods dense bm25 rrf
+
 # 运行企业端 P1 工作流；只有显式确认后才通过方案确认闸门
 python src/agents/workflow.py --text "企业需求原话" --confirm-requirement
 
@@ -151,6 +156,7 @@ docs/                 安装、验收与版本说明
 - 真实论文数据未包含在仓库中，需要使用者自行导入并确认版权和授权。
 - 当前 PDF 流程主要处理文本，不解析论文图片、复杂表格或扫描页 OCR。
 - 当前指标抽取是规则/词典确定性通道；重复论述可能保留为多条证据，复杂并列关系、图表数值和语义补充仍需人工复核或后续可选模型通道。
+- 混合检索与同集消融工具已经具备，但真实 Recall/MRR/nDCG 必须由人工核页制作 qrels 后才能报告；仓库不会用模型自评替代人工金标准。
 - 工程成熟度、成本、知识产权、法规和安全在缺少调查材料时保持“未知”，需要专业人员复核。
 - 当前企业端只输出证据足够支撑的方案数量；不会为了界面完整而固定凑出三个方案。
 - 江西电缆案例来自公开“揭榜挂帅”榜单摘要，仅验收软件流程；不代表项目获得企业委托，也不构成对匹配教师或方案可行性的人工金标准结论。
@@ -161,7 +167,7 @@ docs/                 安装、验收与版本说明
 - `v0.1.0`：首次可运行的本地 MVP。
 - `v0.1.1`：增加双语文档、MIT 许可证、通用 Windows 安装/启动器和合成示例数据。
 - `v0.1.2`：增强 PDF 上下标保真、章节感知切块、SQLite 论文目录、版本化向量集合和检索评测。
-- `master` 开发检查点：企业端 P1 核心闭环，以及方向分流、13 项指标本体、单位归一、证据等级和本地确定性指标抽取底座。
+- `v0.2.0`：企业端 P1 核心闭环、方向/指标底座，以及带统一过滤、BM25、RRF、可选 CrossEncoder 和独立消融记录的混合检索。
 
 ## 许可证
 

@@ -13,6 +13,8 @@ An evidence-grounded industry–academia transfer prototype. It parses papers lo
 - ChromaDB persistence and evidence retrieval
 - Research-direction routing with metadata priority, keyword rules, and an explicit unclassified outcome
 - Local extraction of 13 high-frequency performance metrics with raw and canonical units, conditions, evidence levels, and page/chunk provenance
+- Dense, BM25, and RRF retrieval under one direction/section/numeric filter contract, with an optional CrossEncoder reranker
+- Independent runs per retrieval method with P50/P95 latency, peak GPU memory, and same-qrels evaluation results
 - Traceable research-capability extraction and teacher profiling
 - Structured parsing of requirements, target metrics, test conditions, existing foundations, and excluded approaches
 - Field-by-field correction in the web app, with immutable local JSON snapshots and history restore
@@ -106,6 +108,9 @@ python -m unittest discover -s tests -v
 python src/extraction/metric_extractor.py --preview-only
 python src/extraction/metric_extractor.py
 
+# Generate independent Dense, BM25, and RRF runs plus an experiment manifest
+python scripts/run_retrieval_eval.py --queries data/evaluation/queries.jsonl --output-dir data/evaluation/runs/experiment-001 --methods dense bm25 rrf
+
 # Run the P1 enterprise workflow; explicit confirmation opens the solution gate
 python src/agents/workflow.py --text "original enterprise requirement" --confirm-requirement
 
@@ -151,6 +156,7 @@ docs/                 Installation, acceptance, and release notes
 - Real paper data is not bundled. Users must import authorized content themselves.
 - The current PDF pipeline focuses on text and does not yet interpret figures, complex tables, or scanned-page OCR.
 - Metric extraction currently uses the deterministic rule/dictionary channel. Repeated mentions may remain as separate evidence records; complex enumerations, figure/table values, and semantic supplementation still need human review or a later optional model channel.
+- Hybrid retrieval and same-set ablation tooling are available, but real Recall/MRR/nDCG numbers require page-checked human qrels. The project does not substitute model self-evaluation for a human gold standard.
 - Engineering maturity, cost, IP, regulatory, and safety dimensions remain unknown until supporting investigation is available.
 - The enterprise workflow emits only as many evidence-supported solutions as it can justify; it does not pad the result to three alternatives.
 - The Jiangxi Cable case is a summary of a public open-challenge notice used to test software behavior. It is not a client engagement and is not a human gold-standard endorsement of any matched teacher or proposed solution.
@@ -161,7 +167,7 @@ docs/                 Installation, acceptance, and release notes
 - `v0.1.0`: first runnable local MVP.
 - `v0.1.1`: bilingual documentation, MIT license, portable Windows setup/launchers, and synthetic sample data.
 - `v0.1.2`: layout-aware PDF parsing, section-aware chunks, SQLite paper catalog, versioned vector collection, and retrieval evaluation.
-- `master` development checkpoint: the P1 enterprise loop plus direction routing, a 13-metric ontology, unit normalization, evidence levels, and deterministic local metric extraction.
+- `v0.2.0`: the P1 enterprise loop, direction/metric foundations, and hybrid retrieval with shared filters, BM25, RRF, optional CrossEncoder reranking, and independent ablation records.
 
 ## License
 
