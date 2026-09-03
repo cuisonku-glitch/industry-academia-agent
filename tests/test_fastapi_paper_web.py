@@ -81,6 +81,7 @@ class FastApiPaperWebTests(unittest.TestCase):
         detail = self.client.get(f"/api/papers/{paper_id}")
         self.assertEqual(detail.status_code, 200)
         self.assertTrue(detail.json()["has_pdf"])
+        self.assertFalse(detail.json()["has_deep_report"])
 
         missing_report = self.client.get(f"/api/papers/{paper_id}/report")
         self.assertEqual(missing_report.status_code, 404)
@@ -97,6 +98,16 @@ class FastApiPaperWebTests(unittest.TestCase):
         pdf = self.client.get(f"/api/papers/{paper_id}/pdf")
         self.assertEqual(pdf.status_code, 200)
         self.assertEqual(pdf.headers["content-type"], "application/pdf")
+
+        figures = self.client.get(f"/api/papers/{paper_id}/figures")
+        self.assertEqual(figures.status_code, 200)
+        self.assertEqual(figures.json()["total"], 0)
+
+        no_consent = self.client.post(
+            f"/api/papers/{paper_id}/kimi-reading",
+            json={"consent": False},
+        )
+        self.assertEqual(no_consent.status_code, 403)
 
     def test_home_and_health(self) -> None:
         home = self.client.get("/")

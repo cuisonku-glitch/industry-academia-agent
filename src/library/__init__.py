@@ -28,6 +28,24 @@ from .paper_analysis import (
     render_reading_markdown,
     select_reading_evidence,
 )
+from .paper_figures import (
+    DEFAULT_PAPER_ASSET_DIRECTORY,
+    FIGURE_EXTRACTION_VERSION,
+    FigureAsset,
+    FigureExtractionResult,
+    PaperFigureService,
+)
+from .paper_deep_reading import (
+    DEEP_READING_VERSION,
+    DEFAULT_DEEP_REPORT_DIRECTORY,
+    DEFAULT_PAPER_ROUTE_DIRECTORY,
+    DeepReadingResult,
+    PaperDeepReadingService,
+    build_deep_reading_prompt,
+    render_deep_reading_markdown,
+    select_formula_sources,
+    validate_deep_reading,
+)
 
 __all__ = [
     "DEFAULT_LIBRARY_ROOT",
@@ -50,4 +68,18 @@ __all__ = [
     "PaperReadingResult",
     "render_reading_markdown",
     "select_reading_evidence",
+    "DEFAULT_PAPER_ASSET_DIRECTORY",
+    "FIGURE_EXTRACTION_VERSION",
+    "FigureAsset",
+    "FigureExtractionResult",
+    "PaperFigureService",
+    "DEEP_READING_VERSION",
+    "DEFAULT_DEEP_REPORT_DIRECTORY",
+    "DEFAULT_PAPER_ROUTE_DIRECTORY",
+    "DeepReadingResult",
+    "PaperDeepReadingService",
+    "build_deep_reading_prompt",
+    "render_deep_reading_markdown",
+    "select_formula_sources",
+    "validate_deep_reading",
 ]
