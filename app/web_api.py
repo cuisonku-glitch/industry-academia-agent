@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from src.library import DEFAULT_PAPER_REPORT_DIRECTORY, PaperAnalysisService
@@ -176,6 +176,13 @@ def create_app(
         name="assets",
     )
 
+    @application.middleware("http")
+    async def disable_local_preview_cache(request, call_next):
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
     @application.get("/api/health")
     def health() -> dict[str, Any]:
         return {"status": "ok", "catalog": catalog.count()}
@@ -312,7 +319,14 @@ def create_app(
 
     @application.get("/")
     def index():
-        return FileResponse(STATIC_DIRECTORY / "index.html")
+        return FileResponse(
+            STATIC_DIRECTORY / "index.html",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @application.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return Response(status_code=204)
 
     return application
 

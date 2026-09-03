@@ -102,6 +102,9 @@ class FastApiPaperWebTests(unittest.TestCase):
         home = self.client.get("/")
         self.assertEqual(home.status_code, 200)
         self.assertIn("论文成果库", home.text)
+        self.assertEqual(home.headers["cache-control"], "no-store")
+        self.assertEqual(self.client.get("/assets/app.js").headers["cache-control"], "no-store")
+        self.assertEqual(self.client.get("/favicon.ico").status_code, 204)
         health = self.client.get("/api/health")
         self.assertEqual(health.json(), {"status": "ok", "catalog": 1})
 

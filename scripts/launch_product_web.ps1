@@ -66,6 +66,8 @@ catch {
 
 $Url = "http://127.0.0.1:$Port"
 $HealthUrl = "$Url/api/health"
+$LaunchToken = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+$LaunchUrl = "$Url/?launch=$LaunchToken"
 
 if ($CheckOnly) {
     Write-Host 'Product web launcher check passed.' -ForegroundColor Green
@@ -80,7 +82,7 @@ try {
     if ($health.status -eq 'ok') {
         Write-Host "The product web demo is already running at $Url"
         if (-not $NoBrowser) {
-            Start-Process $Url
+            Start-Process $LaunchUrl
         }
         exit 0
     }
@@ -98,12 +100,12 @@ Write-Host ''
 $browserJob = $null
 if (-not $NoBrowser) {
     $browserJob = Start-Job -ScriptBlock {
-        param($TargetUrl)
+        param($TargetHealthUrl, $TargetLaunchUrl)
         for ($attempt = 0; $attempt -lt 120; $attempt++) {
             try {
-                $response = Invoke-RestMethod -Uri "$TargetUrl/api/health" -TimeoutSec 1
+                $response = Invoke-RestMethod -Uri $TargetHealthUrl -TimeoutSec 1
                 if ($response.status -eq 'ok') {
-                    Start-Process $TargetUrl
+                    Start-Process $TargetLaunchUrl
                     return
                 }
             }
@@ -111,7 +113,7 @@ if (-not $NoBrowser) {
                 Start-Sleep -Milliseconds 500
             }
         }
-    } -ArgumentList $Url
+    } -ArgumentList $HealthUrl, $LaunchUrl
 }
 
 Push-Location $ProjectRoot
