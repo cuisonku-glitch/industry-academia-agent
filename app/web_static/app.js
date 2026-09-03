@@ -26,7 +26,7 @@ function inlineMarkdown(value) {
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 }
 
-function renderMarkdown(markdown) {
+function renderMarkdown(markdown, paperId = "") {
   const lines = String(markdown || "").replaceAll("\r\n", "\n").split("\n");
   const html = [];
   let listType = "";
@@ -38,10 +38,25 @@ function renderMarkdown(markdown) {
     const raw = lines[index];
     const line = raw.trim();
     if (!line) { closeList(); continue; }
-    const image = line.match(/^!\[([^\]]*)\]\((\/api\/papers\/[a-f0-9]{64}\/figures\/[A-Z0-9_-]+\/image)\)$/);
+    if (line.startsWith("```")) {
+      closeList();
+      const language = line.slice(3).trim();
+      const code = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith("```")) {
+        code.push(lines[index]);
+        index += 1;
+      }
+      html.push(`<pre class="formula-block" data-language="${escapeHtml(language)}"><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+      continue;
+    }
+    const image = line.match(/^!\[([^\]]*)\]\((assets\/((?:F|Q|LQ)\d{2}\.png)|\/api\/papers\/[a-f0-9]{64}\/figures\/[A-Z0-9_-]+\/image)\)$/);
     if (image) {
       closeList();
-      html.push(`<figure class="paper-figure"><img src="${image[2]}" alt="${escapeHtml(image[1])}" loading="lazy"><figcaption>${escapeHtml(image[1])}</figcaption></figure>`);
+      const imageUrl = image[2].startsWith("assets/") && /^[a-f0-9]{64}$/.test(paperId)
+        ? `/api/papers/${paperId}/deep-assets/${image[3]}`
+        : image[2];
+      html.push(`<figure class="paper-figure"><a href="${imageUrl}" target="_blank" rel="noopener"><img src="${imageUrl}" alt="${escapeHtml(image[1])}" loading="lazy"></a><figcaption>${escapeHtml(image[1])}</figcaption></figure>`);
       continue;
     }
     const tableNext = lines[index + 1] || "";
@@ -60,7 +75,7 @@ function renderMarkdown(markdown) {
       html.push("</tbody></table>");
       continue;
     }
-    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
     if (heading) { closeList(); const level = heading[1].length; html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`); continue; }
     if (line.startsWith(">")) { closeList(); html.push(`<blockquote>${inlineMarkdown(line.slice(1).trim())}</blockquote>`); continue; }
     const unordered = line.match(/^[-*]\s+(.+)$/);
@@ -252,7 +267,7 @@ function detailHtml(paper) {
               : '<button class="action-button" type="button" disabled><strong>技术路线 draw.io</strong><small>完成一次 Kimi 结构化精读后自动生成</small></button>'}
           </div>
           <div class="consent-box">
-            <label><input id="kimi-consent" type="checkbox"> 我同意本次将这篇论文的选定原文片段、公式候选及最多 4 张提取图像发送到 <code>.env</code> 配置的 Moonshot API。</label>
+            <label><input id="kimi-consent" type="checkbox"> 我同意本次将这篇论文的选定原文片段、最多 6 张原公式区域及最多 4 张论文图像发送到 <code>.env</code> 配置的 Moonshot API。</label>
             <p id="kimi-scope">正在核对本次发送范围……</p>
           </div>
           <div class="section-head"><h2>论文基础信息</h2><p>来自本地 SQLite 目录；未识别字段不会自动编造。</p></div>
@@ -282,7 +297,7 @@ async function showLocalReport(paper) {
   content.innerHTML = '<div class="report-empty">正在读取报告……</div>';
   try {
     const report = await api(`/api/papers/${paper.paper_id}/report`);
-    content.innerHTML = `<article class="report-body">${renderMarkdown(report)}</article><div class="download-row"><a class="download-button" href="/api/papers/${paper.paper_id}/report?download=true">下载 Markdown</a></div>`;
+    content.innerHTML = `<article class="report-body">${renderMarkdown(report, paper.paper_id)}</article><div class="download-row"><a class="download-button" href="/api/papers/${paper.paper_id}/report?download=true">下载 Markdown</a></div>`;
   } catch (error) {
     content.innerHTML = `<div class="report-empty">${escapeHtml(error.message)}</div>`;
   }
@@ -297,7 +312,7 @@ async function showKimiReport(paper) {
   content.innerHTML = '<div class="report-empty">正在读取 Kimi 结构化精读……</div>';
   try {
     const report = await api(`/api/papers/${paper.paper_id}/deep-report`);
-    content.innerHTML = `<article class="report-body">${renderMarkdown(report)}</article><div class="download-row"><a class="download-button" href="/api/papers/${paper.paper_id}/deep-report?download=true">下载 Markdown</a><a class="download-button" href="/api/papers/${paper.paper_id}/technical-route.drawio">下载 draw.io</a></div>`;
+    content.innerHTML = `<article class="report-body">${renderMarkdown(report, paper.paper_id)}</article><div class="download-row"><a class="download-button primary-download" href="/api/papers/${paper.paper_id}/deep-report-package">下载完整报告包 ZIP</a><a class="download-button" href="/api/papers/${paper.paper_id}/deep-report?download=true">仅下载 Markdown</a><a class="download-button" href="/api/papers/${paper.paper_id}/technical-route.drawio">下载 draw.io</a></div>`;
   } catch (error) {
     content.innerHTML = `<div class="report-empty">${escapeHtml(error.message)}</div>`;
   }

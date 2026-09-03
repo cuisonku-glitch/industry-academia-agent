@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import io
+import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 try:
@@ -19,6 +22,10 @@ class FastApiPaperWebTests(unittest.TestCase):
         root = Path(self.temp_directory.name)
         self.catalog_path = root / "papers.sqlite3"
         self.report_directory = root / "reports"
+        self.parsed_directory = root / "parsed"
+        self.asset_directory = root / "paper-assets"
+        self.deep_report_directory = root / "deep-reports"
+        self.route_directory = root / "routes"
         self.pdf_path = root / "paper.pdf"
         self.pdf_path.write_bytes(b"%PDF-1.4\n% local test fixture\n")
 
@@ -56,6 +63,10 @@ class FastApiPaperWebTests(unittest.TestCase):
             create_app(
                 catalog_path=self.catalog_path,
                 report_directory=self.report_directory,
+                parsed_directory=self.parsed_directory,
+                asset_directory=self.asset_directory,
+                deep_report_directory=self.deep_report_directory,
+                route_directory=self.route_directory,
             )
         )
 
@@ -108,6 +119,48 @@ class FastApiPaperWebTests(unittest.TestCase):
             json={"consent": False},
         )
         self.assertEqual(no_consent.status_code, 403)
+
+    def test_portable_deep_report_package_and_asset_route(self) -> None:
+        paper_id = "a" * 64
+        paper_directory = self.deep_report_directory / paper_id
+        assets = paper_directory / "assets"
+        assets.mkdir(parents=True)
+        (assets / "F01.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        structured = {
+            "executive_summary": {"text": "本地摘要", "source_labels": ["E01"]},
+            "research_problem": {"text": "研究问题", "source_labels": ["E01"]},
+            "innovations": [], "method_steps": [], "key_findings": [],
+            "figure_interpretations": [], "formula_interpretations": [],
+            "transfer_assets": [], "limitations": [], "uncertainties": [],
+        }
+        payload = {
+            "model": "kimi-k3", "structured": structured,
+            "figures": [], "formulas": [],
+        }
+        (paper_directory / "latest.json").write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8"
+        )
+        (paper_directory / "latest.md").write_text("# old", encoding="utf-8")
+        route_directory = self.route_directory / paper_id
+        route_directory.mkdir(parents=True)
+        (route_directory / "latest.drawio").write_text("<mxfile/>", encoding="utf-8")
+
+        report = self.client.get(f"/api/papers/{paper_id}/deep-report")
+        self.assertEqual(report.status_code, 200)
+        self.assertIn("证据与判断边界", report.text)
+
+        image = self.client.get(f"/api/papers/{paper_id}/deep-assets/F01.png")
+        self.assertEqual(image.status_code, 200)
+        self.assertEqual(image.headers["content-type"], "image/png")
+
+        package = self.client.get(f"/api/papers/{paper_id}/deep-report-package")
+        self.assertEqual(package.status_code, 200)
+        with zipfile.ZipFile(io.BytesIO(package.content)) as archive:
+            names = set(archive.namelist())
+        self.assertIn("00_Kimi结构化精读.md", names)
+        self.assertIn("01_结构化数据.json", names)
+        self.assertIn("02_技术路线.drawio", names)
+        self.assertNotIn("assets/F01.png", names)
 
     def test_home_and_health(self) -> None:
         home = self.client.get("/")
