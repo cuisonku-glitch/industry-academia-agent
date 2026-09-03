@@ -15,7 +15,10 @@ from src.repository import PaperCatalog
 from src.solutions import build_enterprise_solution, route_to_drawio
 
 
-APP_PATH = Path(__file__).resolve().parents[1] / "app" / "app.py"
+LEGACY_APP_PATH = Path(__file__).resolve().parents[1] / "app" / "app.py"
+APP_PATH = (
+    Path(__file__).resolve().parents[1] / "app" / "app_pages" / "enterprise.py"
+)
 ACADEMY_PATH = (
     Path(__file__).resolve().parents[1] / "app" / "app_pages" / "academy.py"
 )
@@ -163,6 +166,11 @@ class StreamlitAppTests(unittest.TestCase):
 
     def test_native_router_opens_default_enterprise_page(self) -> None:
         app = AppTest.from_file(str(ROUTER_PATH), default_timeout=20).run()
+        self.assertEqual(len(app.exception), 0)
+        self.assertIn("产学研合作智能分析", [item.value for item in app.title])
+
+    def test_legacy_entrypoint_delegates_to_native_router(self) -> None:
+        app = AppTest.from_file(str(LEGACY_APP_PATH), default_timeout=20).run()
         self.assertEqual(len(app.exception), 0)
         self.assertIn("产学研合作智能分析", [item.value for item in app.title])
 

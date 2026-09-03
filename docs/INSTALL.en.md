@@ -87,7 +87,7 @@ python -m pip install -r requirements.txt -r requirements-gpu-windows.txt
 Copy-Item .env.example .env
 python -c "from src.retrieval.embedder import LocalEmbedder; print(LocalEmbedder().device)"
 python -m unittest discover -s tests -v
-python -m streamlit run app/app.py
+python -m streamlit run app/streamlit_app.py
 ```
 
 On Linux or macOS, install the appropriate PyTorch build for that platform together with `requirements.txt`. The Windows GPU Wheel is not portable to other systems.

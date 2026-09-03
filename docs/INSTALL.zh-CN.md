@@ -87,7 +87,7 @@ python -m pip install -r requirements.txt -r requirements-gpu-windows.txt
 Copy-Item .env.example .env
 python -c "from src.retrieval.embedder import LocalEmbedder; print(LocalEmbedder().device)"
 python -m unittest discover -s tests -v
-python -m streamlit run app/app.py
+python -m streamlit run app/streamlit_app.py
 ```
 
 Linux/macOS 使用对应平台的 PyTorch 安装方式，并安装 `requirements.txt`。Windows 专用 GPU Wheel 不适用于其他平台。

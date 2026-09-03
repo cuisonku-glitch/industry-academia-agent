@@ -130,7 +130,7 @@ python src/agents/workflow.py --text "original enterprise requirement" --confirm
 python src/retrieval/rag.py
 
 # Start Streamlit manually
-python -m streamlit run app/app.py
+python -m streamlit run app/streamlit_app.py
 
 # Register a recursive paper library and create reviewable tags (local only)
 python scripts/sync_paper_library.py --papers-dir "D:\your-paper-library"

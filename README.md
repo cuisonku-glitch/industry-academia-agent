@@ -130,7 +130,7 @@ python src/agents/workflow.py --text "企业需求原话" --confirm-requirement
 python src/retrieval/rag.py
 
 # 手动启动网页
-python -m streamlit run app/app.py
+python -m streamlit run app/streamlit_app.py
 
 # 递归登记大型论文库并生成待审核标签（纯本地）
 python scripts/sync_paper_library.py --papers-dir "D:\你的论文目录"
