@@ -34,6 +34,9 @@ data/processed/matches/
 data/processed/agent_runs/
 data/processed/papers/
 data/processed/paper_reports/
+data/processed/paper_assets/
+data/processed/paper_deep_reports/
+data/processed/paper_routes/
 
 # Downloaded local AI models
 .cache/

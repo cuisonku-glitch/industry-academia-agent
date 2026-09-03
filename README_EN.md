@@ -22,6 +22,9 @@ An evidence-grounded industry–academia transfer prototype. It parses papers lo
 - Fuzzy search by teacher, author, title, or tag with SQLite-backed pagination
 - Multi-layer paper tag suggestions with provenance, confidence, and human review status
 - Academy-side upload, metadata correction, tag confirmation/rejection, and Markdown catalog preview
+- Local figure/caption extraction with figure labels, page provenance, and `Fxx` source IDs
+- Consent-gated Kimi structured reading that combines text, figure, formula, route, and transfer-asset analysis in one report
+- Validation of every non-empty Kimi claim against `Exx/Fxx/Qxx` sources plus native editable paper-route `.drawio` export
 - Structured parsing of requirements, target metrics, test conditions, existing foundations, and excluded approaches
 - Field-by-field correction in the web app, with immutable local JSON snapshots and history restore
 - GPU retrieval only after the user confirms a saved version, with unknowns preserved as clarification items
@@ -99,7 +102,7 @@ python src/extraction/teacher_profiler.py
 
 ## Moonshot/Kimi configuration
 
-Enterprise matching runs locally and does not need an API key. Only paper Q&A and explicit capability extraction use Moonshot.
+Enterprise matching runs locally and does not need an API key. Paper Q&A, explicit capability extraction, and Kimi structured paper reading use Moonshot.
 
 When `.env` is missing, the installer creates it from `.env.example`:
 
@@ -111,7 +114,7 @@ INDUSTRY_AGENT_PAPER_LIBRARY_DIR=
 INDUSTRY_AGENT_CATALOG_PATH=
 ```
 
-Never commit `.env`. The web app sends at most five locally retrieved paper chunks only after the user checks the consent box. The API key is never rendered in the page.
+Never commit `.env`. Paper Q&A sends at most five retrieved chunks. A single-paper structured reading sends at most ten evidence excerpts, six formula candidates, and four extracted images. Both require a per-run consent checkbox; the API key is never rendered in the page, and the library is never submitted in bulk by default.
 
 ## Common commands
 
@@ -157,7 +160,7 @@ The following paths are excluded by `.gitignore` and are not uploaded by normal 
 - Raw papers under `data/raw/`
 - ChromaDB data under `data/vector_db/` and the Windows user profile
 - Metric records, capability records, teacher profiles, enterprise requests, match results, and Agent run records
-- Parsed paper text and local paper-reading reports
+- Parsed paper text, local/Kimi reading reports, extracted figures, and paper routes
 - Downloaded local model caches
 
 Always run a secret scan before publishing and confirm that you have permission to process the papers and enterprise data.
@@ -184,7 +187,7 @@ docs/                 Installation, acceptance, and release notes
 ## Current limitations
 
 - Real paper data is not bundled. Users must import authorized content themselves.
-- The current PDF pipeline focuses on text and does not yet interpret figures, complex tables, or scanned-page OCR.
+- The pipeline can now extract embedded figures or caption-adjacent page regions for consent-gated, cited Kimi interpretation. Structured values from complex tables and scanned-page OCR are not implemented yet.
 - Metric extraction currently uses the deterministic rule/dictionary channel. Repeated mentions may remain as separate evidence records; complex enumerations, figure/table values, and semantic supplementation still need human review or a later optional model channel.
 - Hybrid retrieval and same-set ablation tooling are available, but real Recall/MRR/nDCG numbers require page-checked human qrels. The project does not substitute model self-evaluation for a human gold standard.
 - Engineering maturity, cost, IP, regulatory, and safety dimensions remain unknown until supporting investigation is available.
