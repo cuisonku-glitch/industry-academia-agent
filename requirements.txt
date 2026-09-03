@@ -14,3 +14,5 @@ python-dotenv==1.2.3
 # Local web demo
 streamlit==1.62.0
 streamlit-pdf==2.0.1
+fastapi==0.140.7
+uvicorn==0.52.4
