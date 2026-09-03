@@ -6,6 +6,7 @@ import gzip
 import json
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from xml.etree import ElementTree as ET
@@ -14,6 +15,7 @@ import pymupdf
 
 from src.library.paper_deep_reading import (
     PaperDeepReadingService,
+    select_formula_blocks,
     validate_deep_reading,
 )
 from src.library.paper_figures import PaperFigureService
@@ -79,8 +81,10 @@ class PaperDeepReadingTests(unittest.TestCase):
                         "page": 1,
                         "text": "摘要 本文提出新型传感结构并完成实验验证。灵敏度 S=Δλ/ΔT，在测试区间内获得提升，长期稳定性仍需验证。",
                         "blocks": [
-                            {"block_number": 1, "block_type": "paragraph", "text": "摘要"},
-                            {"block_number": 2, "block_type": "paragraph", "text": "本文提出新型传感结构并完成实验验证。灵敏度 S=Δλ/ΔT，在测试区间内获得提升，长期稳定性仍需验证。该研究形成可复用的器件设计和实验流程，可作为后续工程样机开发的论文证据。"},
+                            {"block_number": 1, "block_type": "paragraph", "text": "摘要", "bbox": [72, 55, 110, 75]},
+                            {"block_number": 2, "block_type": "paragraph", "text": "本文提出新型传感结构并完成实验验证。", "bbox": [72, 80, 400, 96]},
+                            {"block_number": 3, "block_type": "paragraph", "text": "S\n=\nΔλ/ΔT    （1.1）", "bbox": [160, 100, 420, 130]},
+                            {"block_number": 4, "block_type": "paragraph", "text": "式中，在测试区间内灵敏度获得提升，长期稳定性仍需验证。该研究形成可复用的器件设计和实验流程，可作为后续工程样机开发的论文证据。", "bbox": [72, 135, 520, 170]},
                         ],
                     }
                 ],
@@ -123,6 +127,8 @@ class PaperDeepReadingTests(unittest.TestCase):
             self.assertTrue(result.drawio_path.is_file())
             self.assertIn("## 图版解读", result.report)
             self.assertIn("## 公式解读", result.report)
+            self.assertIn("assets/Q01.png", result.report)
+            self.assertTrue((root / "reports" / paper_id / "assets" / "Q01.png").is_file())
             root_element = ET.fromstring(result.drawio_path.read_text(encoding="utf-8"))
             self.assertEqual(root_element.tag, "mxfile")
             assert recorder.kwargs is not None
@@ -130,6 +136,34 @@ class PaperDeepReadingTests(unittest.TestCase):
             messages = recorder.kwargs["messages"]
             self.assertIsInstance(messages[1]["content"], list)
             self.assertEqual(messages[1]["content"][0]["type"], "text")
+            self.assertTrue(
+                any(item.get("type") == "image_url" for item in messages[1]["content"])
+            )
+
+            package = service.build_package(record)
+            with zipfile.ZipFile(package) as archive:
+                names = set(archive.namelist())
+            self.assertIn("00_Kimi结构化精读.md", names)
+            self.assertIn("01_结构化数据.json", names)
+            self.assertIn("02_技术路线.drawio", names)
+            self.assertIn("assets/Q01.png", names)
+
+    def test_formula_selector_rejects_prose_metrics_and_keeps_equation_blocks(self) -> None:
+        parsed = {
+            "pages": [
+                {
+                    "page": 1,
+                    "blocks": [
+                        {"text": "传感距离=44 km，这是摘要中的性能指标。", "bbox": [10, 10, 300, 25]},
+                        {"text": "S\n=\nΔλ/ΔT   （2.1）", "bbox": [80, 50, 300, 85]},
+                    ],
+                }
+            ]
+        }
+        formulas = select_formula_blocks(parsed)
+        self.assertEqual(len(formulas), 1)
+        self.assertEqual(formulas[0]["source_label"], "Q01")
+        self.assertIn("（2.1）", formulas[0]["text"])
 
 
 if __name__ == "__main__":

@@ -252,14 +252,18 @@ h1, h2, h3, p { margin-top: 0; }
 .report-body h1 { font-size: 23px; }
 .report-body h2 { margin-top: 26px; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 18px; }
 .report-body h3 { margin-top: 20px; font-size: 15px; }
+.report-body h4 { margin: 18px 0 8px; font-size: 13px; color: var(--accent-dark); }
 .report-body blockquote { margin: 12px 0; padding: 10px 13px; border-left: 3px solid var(--accent); background: #f5faf8; color: #4f5e57; }
 .report-body code { padding: 2px 5px; border-radius: 4px; background: #eef2ef; font-family: Consolas, monospace; font-size: 11px; }
+.report-body .formula-block { margin: 12px 0 16px; padding: 15px 18px; overflow-x: auto; border: 1px solid #d7e5e1; border-radius: 8px; background: #f5faf8; color: #173e36; }
+.report-body .formula-block code { padding: 0; background: transparent; white-space: pre-wrap; font-size: 13px; line-height: 1.65; }
 .report-body table { width: 100%; border-collapse: collapse; margin: 13px 0; font-size: 11px; }
 .report-body th, .report-body td { padding: 7px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
 .report-body th { background: #f1f4f2; }
 .report-empty { display: grid; place-items: center; min-height: 460px; padding: 40px; color: var(--muted); text-align: center; line-height: 1.8; }
 .pdf-frame { width: 100%; height: 68vh; min-height: 620px; border: 0; background: #e7e9e8; }
 .download-row { display: flex; justify-content: flex-end; gap: 8px; padding: 0 20px 16px; }
+.download-button.primary-download { border-color: var(--accent); background: var(--accent); color: white; }
 .download-button { display: inline-block; padding: 8px 12px; background: var(--accent-soft); color: var(--accent-dark); font-size: 11px; font-weight: 700; text-decoration: none; }
 .paper-figure { margin: 18px 0 26px; }
 .paper-figure img { display: block; max-width: 100%; max-height: 620px; margin: 0 auto; border: 1px solid var(--line); border-radius: 8px; background: #fff; }

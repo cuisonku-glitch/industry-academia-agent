@@ -7,12 +7,15 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import tempfile
+import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
+import pymupdf
 from openai import OpenAI
 
 from src.extraction.capability_extractor import parse_json_object
@@ -29,10 +32,12 @@ from .paper_ingestion import DEFAULT_PARSED_PAPER_DIRECTORY
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DEEP_REPORT_DIRECTORY = PROJECT_ROOT / "data" / "processed" / "paper_deep_reports"
 DEFAULT_PAPER_ROUTE_DIRECTORY = PROJECT_ROOT / "data" / "processed" / "paper_routes"
-DEEP_READING_VERSION = "kimi_multimodal_reading_v1"
+DEEP_READING_VERSION = "kimi_multimodal_reading_v2"
+PORTABLE_REPORT_VERSION = "portable_markdown_v2"
 MAX_EVIDENCE_CHUNKS = 10
 MAX_FORMULA_SOURCES = 6
 FORMULA_PATTERN = re.compile(r"(?:[=≈≤≥±∑∫√]|式中|公式|\^\{|_[a-zA-Z0-9{])")
+EQUATION_NUMBER_PATTERN = re.compile(r"[（(]\s*\d+(?:\.\d+)+\s*[）)]")
 
 SYSTEM_PROMPT = """你是严谨的论文结构化精读助手。
 只能依据本次提供的论文原文证据、公式候选和论文图像作答，禁止用外部知识补全。
@@ -102,6 +107,7 @@ def select_deep_reading_evidence(chunks: Sequence[dict[str, Any]]) -> list[dict[
 
 
 def select_formula_sources(chunks: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Legacy text-only selector retained for old reports and diagnostics."""
     selected: list[dict[str, Any]] = []
     seen: set[str] = set()
     for chunk in chunks:
@@ -123,6 +129,72 @@ def select_formula_sources(chunks: Sequence[dict[str, Any]]) -> list[dict[str, A
         )
         if len(selected) >= MAX_FORMULA_SOURCES:
             break
+    return selected
+
+
+def _formula_block_score(text: str) -> int:
+    """Score independent equation blocks while rejecting prose and citations."""
+
+    value = str(text).strip()
+    if "=" not in value or len(value) > 420:
+        return 0
+    multiline = value.count("\n") >= 2
+    numbered = bool(EQUATION_NUMBER_PATTERN.search(value))
+    private_math_glyph = bool(re.search(r"[\uf000-\uf8ff]", value))
+    if not (numbered or multiline or private_math_glyph):
+        return 0
+    return (
+        8 * int(numbered)
+        + 4 * int(multiline)
+        + 2 * int(private_math_glyph)
+        + min(value.count("="), 3)
+    )
+
+
+def select_formula_blocks(
+    parsed: dict[str, Any], *, max_sources: int = MAX_FORMULA_SOURCES,
+    label_prefix: str = "Q",
+) -> list[dict[str, Any]]:
+    """Select real equation-layout blocks, distributing evidence across pages."""
+
+    if max_sources < 1:
+        return []
+    page_candidates: list[tuple[int, int, int, dict[str, Any], str]] = []
+    for page_payload in parsed.get("pages", []):
+        page_number = int(page_payload.get("page", 0))
+        blocks = page_payload.get("blocks", [])
+        ranked: list[tuple[int, int, dict[str, Any], str]] = []
+        for index, block in enumerate(blocks):
+            text = str(block.get("text", "")).strip()
+            bbox = block.get("bbox")
+            score = _formula_block_score(text)
+            if score <= 0 or not isinstance(bbox, list) or len(bbox) != 4:
+                continue
+            ranked.append((score, index, block, text))
+        if not ranked:
+            continue
+        score, index, block, _ = max(ranked, key=lambda item: (item[0], -item[1]))
+        context_parts: list[str] = []
+        for neighbor in blocks[max(0, index - 1):index] + blocks[index + 1:index + 3]:
+            neighbor_text = _compact(str(neighbor.get("text", "")), 260)
+            if neighbor_text and _formula_block_score(neighbor_text) == 0:
+                context_parts.append(neighbor_text)
+        page_candidates.append(
+            (page_number, score, index, block, " ".join(context_parts[:2]))
+        )
+
+    selected: list[dict[str, Any]] = []
+    for page_number, _, _, block, context in sorted(page_candidates)[:max_sources]:
+        selected.append(
+            {
+                "source_label": f"{label_prefix}{len(selected) + 1:02d}",
+                "page_start": page_number,
+                "page_end": page_number,
+                "text": str(block.get("text", "")).strip(),
+                "context": context,
+                "bbox": [float(value) for value in block["bbox"]],
+            }
+        )
     return selected
 
 
@@ -175,7 +247,8 @@ def build_deep_reading_prompt(
         for asset in figures
     ] or ["（本次未提供论文图像）"]
     formula_lines = [
-        f"[{item['source_label']}] 第 {item['page_start']}-{item['page_end']} 页；{item['text']}"
+        f"[{item['source_label']}] 第 {item['page_start']}-{item['page_end']} 页；"
+        f"原公式抽取文本：{item['text']}；相邻说明：{item.get('context') or '未识别'}"
         for item in formulas
     ] or ["（未检出可靠的公式候选）"]
     return "\n".join(
@@ -202,7 +275,7 @@ def build_deep_reading_prompt(
             "图像清单（图像按同样顺序附在本消息后）：",
             "\n".join(figure_lines),
             "",
-            "公式候选：",
+            "公式候选（对应原公式截图按相同顺序附在本消息后）：",
             "\n".join(formula_lines),
         ]
     )
@@ -336,10 +409,17 @@ def validate_deep_reading(
 def render_deep_reading_markdown(
     record: PaperRecord, structured: dict[str, Any], figures: Sequence[FigureAsset],
     formulas: Sequence[dict[str, Any]], *, model: str,
+    supplemental_formulas: Sequence[dict[str, Any]] = (),
 ) -> str:
     lines = [
         f"# {record.title}", "",
-        "> Kimi 结构化精读（含图版与公式解读）。所有观点均保留 E/F/Q 证据标签；自动结果仍需领域专家复核。",
+        "> Kimi 结构化精读（含原图、原公式与解读）。所有观点均保留 E/F/Q 证据标签；自动结果仍需领域专家复核。",
+        "", "## 论文基本信息", "",
+        "| 项目 | 内容 |", "|---|---|",
+        f"| 题目 | {record.title} |",
+        f"| 导师 | {record.teacher or '待识别'} |",
+        f"| 作者 | {'、'.join(record.authors) or '待识别'} |",
+        f"| 年份 | {record.year or '待识别'} |",
         "", "## 一页总结", "",
         structured["executive_summary"]["text"] or "证据不足，待人工核对。",
         "", f"依据：{'、'.join(structured['executive_summary']['source_labels']) or '无'}",
@@ -373,7 +453,7 @@ def render_deep_reading_markdown(
         lines.extend(
             [
                 f"### {asset.asset_id} · {asset.label}（第 {asset.page} 页）", "",
-                f"![{asset.asset_id} {asset.label}](/api/papers/{record.paper_id}/figures/{asset.asset_id}/image)", "",
+                f"![{asset.asset_id} {asset.label}](assets/{asset.file_name})", "",
                 f"图注：{asset.caption}", "", f"直接观察：{item['observation'] or '待核对'}", "",
                 f"科研含义：{item['meaning'] or '待核对'}（依据：{'、'.join(item['source_labels'])}）", "",
             ]
@@ -388,12 +468,31 @@ def render_deep_reading_markdown(
         lines.extend(
             [
                 f"### {item['source_id']} · 第 {source['page_start']}-{source['page_end']} 页", "",
-                f"- 公式/关系：{item['formula'] or '原文公式排版需查看 PDF'}",
+                *(
+                    [f"![{item['source_id']} 原论文公式](assets/{source['file_name']})", ""]
+                    if source.get("file_name") else []
+                ),
+                "**Kimi 转写/定量关系**", "",
+                "```text", item['formula'] or "原文公式排版需查看 PDF", "```", "",
                 f"- 含义：{item['meaning'] or '待核对'}",
                 f"- 条件：{item['conditions'] or '论文证据未明确'}",
                 f"- 依据：{'、'.join(item['source_labels'])}", "",
             ]
         )
+    if supplemental_formulas:
+        lines.extend(
+            [
+                "### 原论文公式原貌（本地补充）", "",
+                "> 以下公式由本机直接从原 PDF 裁切，未在本次修复中重新发送给 Kimi；下次精读时将自动与解读配对。", "",
+            ]
+        )
+        for source in supplemental_formulas:
+            lines.extend(
+                [
+                    f"#### {source['source_label']} · 第 {source['page_start']} 页", "",
+                    f"![{source['source_label']} 原论文公式](assets/{source['file_name']})", "",
+                ]
+            )
     add_claims("可转化技术资产", "transfer_assets")
     add_claims("局限与工程风险", "limitations")
     lines.extend(["", "## 不确定项", ""])
@@ -401,7 +500,17 @@ def render_deep_reading_markdown(
         lines.extend(f"- {item}" for item in structured["uncertainties"])
     else:
         lines.append("- 无额外不确定项；仍建议由论文作者或领域专家复核。")
-    lines.extend(["", "## 生成信息", "", f"- 模型：{model}", f"- 流程版本：{DEEP_READING_VERSION}", "- E：原文片段；F：原始论文图像区域；Q：公式候选原文。", ""])
+    lines.extend(
+        [
+            "", "## 证据与判断边界", "",
+            "- **论文证据**：E 为可定位原文片段，F 为原始论文图像区域，Q 为公式/定量关系证据；旧报告中的 LQ 为本地补充的原公式区域。",
+            "- **模型解读**：基于上述证据的 Kimi 结构化归纳，不等同于作者原话。",
+            "- **待尽调**：TRL、市场规模、竞争格局、知识产权与 FTO 不由单篇论文自动定论，须另行核验。",
+            "", "## 生成信息", "", f"- 模型：{model}",
+            f"- 流程版本：{DEEP_READING_VERSION}",
+            f"- 报告格式：{PORTABLE_REPORT_VERSION}", "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -444,6 +553,66 @@ class PaperDeepReadingService:
     def drawio_path(self, paper_id: str) -> Path:
         return self.route_directory / paper_id / "latest.drawio"
 
+    def assets_directory(self, paper_id: str) -> Path:
+        return self.paper_directory(paper_id) / "assets"
+
+    def asset_path(self, paper_id: str, file_name: str) -> Path:
+        if not re.fullmatch(r"(?:F|Q|LQ)\d{2}\.png", file_name):
+            raise RuntimeError("报告资产文件名无效")
+        path = (self.assets_directory(paper_id) / file_name).resolve()
+        if path.parent != self.assets_directory(paper_id).resolve():
+            raise RuntimeError("报告资产路径无效")
+        return path
+
+    def package_path(self, paper_id: str) -> Path:
+        return self.paper_directory(paper_id) / "complete_report.zip"
+
+    def _copy_figure_assets(
+        self, paper_id: str, figures: Sequence[FigureAsset],
+    ) -> None:
+        self.assets_directory(paper_id).mkdir(parents=True, exist_ok=True)
+        for asset in figures:
+            source = self.figure_service.asset_path(asset)
+            if source.is_file():
+                shutil.copy2(source, self.asset_path(paper_id, asset.file_name))
+
+    def _render_formula_assets(
+        self, record: PaperRecord, formulas: Sequence[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        if not formulas:
+            return []
+        pdf_path = Path(record.file_path)
+        if pdf_path.suffix.casefold() != ".pdf" or not pdf_path.is_file():
+            return [dict(item) for item in formulas]
+        self.assets_directory(record.paper_id).mkdir(parents=True, exist_ok=True)
+        rendered: list[dict[str, Any]] = []
+        with pymupdf.open(pdf_path) as document:
+            for item in formulas:
+                source = dict(item)
+                page_number = int(source.get("page_start", 0))
+                bbox = source.get("bbox")
+                if not (1 <= page_number <= len(document)) or not isinstance(bbox, list) or len(bbox) != 4:
+                    rendered.append(source)
+                    continue
+                page = document[page_number - 1]
+                rect = pymupdf.Rect(tuple(float(value) for value in bbox))
+                clip = pymupdf.Rect(
+                    max(page.rect.x0, rect.x0 - 80),
+                    max(page.rect.y0, rect.y0 - 4),
+                    min(page.rect.x1, rect.x1 + 18),
+                    min(page.rect.y1, rect.y1 + 8),
+                )
+                file_name = f"{source['source_label']}.png"
+                pixmap = page.get_pixmap(
+                    matrix=pymupdf.Matrix(2.4, 2.4), clip=clip, alpha=False,
+                )
+                pixmap.save(self.asset_path(record.paper_id, file_name))
+                source["file_name"] = file_name
+                source["image_width"] = pixmap.width
+                source["image_height"] = pixmap.height
+                rendered.append(source)
+        return rendered
+
     def load_report(self, paper_id: str) -> str | None:
         path = self.report_path(paper_id)
         return path.read_text(encoding="utf-8") if path.is_file() else None
@@ -451,6 +620,103 @@ class PaperDeepReadingService:
     def load_payload(self, paper_id: str) -> dict[str, Any] | None:
         path = self.json_path(paper_id)
         return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+
+    def ensure_portable_report(self, record: PaperRecord) -> str | None:
+        """Repair v1 reports locally without making another model request."""
+
+        payload = self.load_payload(record.paper_id)
+        if payload is None:
+            return self.load_report(record.paper_id)
+        available_figures = {
+            asset.asset_id: asset
+            for asset in self.figure_service.load_assets(record.paper_id)
+        }
+        requested_ids = {
+            str(item.get("asset_id", "")) for item in payload.get("figures", [])
+        }
+        figures = [
+            available_figures[asset_id]
+            for asset_id in requested_ids
+            if asset_id in available_figures
+        ]
+        figures.sort(key=lambda asset: asset.asset_id)
+        self._copy_figure_assets(record.paper_id, figures)
+
+        formulas = [dict(item) for item in payload.get("formulas", [])]
+        supplemental = [
+            dict(item) for item in payload.get("supplemental_formula_assets", [])
+            if isinstance(item, dict)
+        ]
+        supplemental_ready = bool(supplemental) and all(
+            self.asset_path(record.paper_id, str(item.get("file_name", ""))).is_file()
+            for item in supplemental
+        )
+        if formulas and not any(item.get("file_name") for item in formulas) and not supplemental_ready:
+            parsed = load_parsed_paper(
+                self.parsed_directory / f"{record.paper_id}.json.gz"
+            )
+            supplemental = self._render_formula_assets(
+                record,
+                select_formula_blocks(parsed, label_prefix="LQ"),
+            )
+        report = render_deep_reading_markdown(
+            record,
+            payload["structured"],
+            figures,
+            formulas,
+            model=str(payload.get("model", "未记录")),
+            supplemental_formulas=supplemental,
+        )
+        payload["portable_report_version"] = PORTABLE_REPORT_VERSION
+        if supplemental:
+            payload["supplemental_formula_assets"] = supplemental
+        _write_text_atomic(self.report_path(record.paper_id), report)
+        _write_text_atomic(
+            self.json_path(record.paper_id),
+            json.dumps(payload, ensure_ascii=False, indent=2),
+        )
+        return report
+
+    def build_package(self, record: PaperRecord) -> Path:
+        report = self.ensure_portable_report(record)
+        if report is None:
+            raise RuntimeError("该论文尚未生成 Kimi 结构化精读")
+        package_path = self.package_path(record.paper_id)
+        package_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                suffix=".zip.tmp", dir=package_path.parent, delete=False,
+            ) as temporary:
+                temporary_path = Path(temporary.name)
+            with zipfile.ZipFile(temporary_path, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("00_Kimi结构化精读.md", report)
+                archive.write(self.json_path(record.paper_id), "01_结构化数据.json")
+                drawio = self.drawio_path(record.paper_id)
+                if drawio.is_file():
+                    archive.write(drawio, "02_技术路线.drawio")
+                asset_names = sorted(
+                    set(
+                        re.findall(
+                            r"\(assets/((?:F|Q|LQ)\d{2}\.png)\)", report
+                        )
+                    )
+                )
+                for asset_name in asset_names:
+                    asset = self.asset_path(record.paper_id, asset_name)
+                    if asset.is_file():
+                        archive.write(asset, f"assets/{asset.name}")
+                archive.writestr(
+                    "README.txt",
+                    "请使用支持 Markdown 预览的编辑器打开 00_Kimi结构化精读.md，"
+                    "并保持 assets 文件夹与报告的相对位置不变。\n",
+                )
+            os.replace(temporary_path, package_path)
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+        return package_path
 
     def generate(
         self, record: PaperRecord, *, include_figures: bool = True,
@@ -463,7 +729,7 @@ class PaperDeepReadingService:
         evidence = select_deep_reading_evidence(chunks)
         if not evidence:
             raise RuntimeError("没有找到可追溯的正文证据，无法调用 Kimi")
-        formulas = select_formula_sources(chunks)
+        formulas = select_formula_blocks(parsed)
         figures: tuple[FigureAsset, ...] = ()
         if include_figures:
             figures = self.figure_service.load_assets(record.paper_id)
@@ -471,6 +737,8 @@ class PaperDeepReadingService:
                 figures = self.figure_service.extract(record, max_assets=max_figures).assets
             figures = figures[:max_figures]
 
+        self._copy_figure_assets(record.paper_id, figures)
+        formulas = self._render_formula_assets(record, formulas)
         prompt = build_deep_reading_prompt(record, evidence, figures, formulas)
         user_content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
         for asset in figures:
@@ -478,6 +746,22 @@ class PaperDeepReadingService:
             encoded = base64.b64encode(image_bytes).decode("ascii")
             user_content.append({"type": "text", "text": f"[{asset.asset_id}] 第 {asset.page} 页，{asset.label}：{asset.caption}"})
             user_content.append({"type": "image_url", "image_url": {"url": f"data:image/png;base64,{encoded}"}})
+        for formula in formulas:
+            file_name = formula.get("file_name")
+            if not file_name:
+                continue
+            encoded = base64.b64encode(
+                self.asset_path(record.paper_id, str(file_name)).read_bytes()
+            ).decode("ascii")
+            user_content.append(
+                {
+                    "type": "text",
+                    "text": f"[{formula['source_label']}] 第 {formula['page_start']} 页原公式区域",
+                }
+            )
+            user_content.append(
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{encoded}"}}
+            )
         response = self.client.chat.completions.create(
             model=self.config.model,
             messages=[

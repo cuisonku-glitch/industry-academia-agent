@@ -26,7 +26,7 @@ from src.library import (
     PaperDeepReadingService,
     PaperFigureService,
 )
-from src.library.paper_deep_reading import select_deep_reading_evidence, select_formula_sources
+from src.library.paper_deep_reading import select_deep_reading_evidence, select_formula_blocks
 from src.library.paper_indexing import build_library_chunks, load_parsed_paper
 from src.library.paper_ingestion import DEFAULT_PARSED_PAPER_DIRECTORY
 from src.retrieval.rag import MoonshotConfig
@@ -419,7 +419,7 @@ def create_app(
             parsed = load_parsed_paper(parsed_path / f"{record.paper_id}.json.gz")
             chunks = build_library_chunks(record, parsed)
             evidence_count = len(select_deep_reading_evidence(chunks))
-            formula_count = len(select_formula_sources(chunks))
+            formula_count = len(select_formula_blocks(parsed))
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         try:
@@ -439,7 +439,7 @@ def create_app(
             "evidence_count": evidence_count,
             "formula_count": formula_count,
             "available_figure_count": len(figures.load_assets(paper_id)),
-            "notice": "只在勾选同意并点击后，发送本篇最多 10 个原文片段、最多 4 张提取图像和公式候选。",
+            "notice": "只在勾选同意并点击后，发送本篇最多 10 个原文片段、最多 4 张论文图像和最多 6 张原公式区域。",
         }
 
     @application.post("/api/papers/{paper_id}/kimi-reading")
@@ -479,7 +479,7 @@ def create_app(
     @application.get("/api/papers/{paper_id}/deep-report")
     def paper_deep_report(paper_id: str, download: bool = False):
         record = require_paper(paper_id)
-        report = deep_reading.load_report(paper_id)
+        report = deep_reading.ensure_portable_report(record)
         if report is None:
             raise HTTPException(
                 status_code=404, detail="该论文尚未生成 Kimi 结构化精读"
@@ -491,6 +491,30 @@ def create_app(
                 "Content-Disposition": f"attachment; filename*=UTF-8''{filename}"
             }
         return PlainTextResponse(report, media_type="text/markdown", headers=headers)
+
+    @application.get("/api/papers/{paper_id}/deep-assets/{file_name}")
+    def paper_deep_asset(paper_id: str, file_name: str):
+        require_paper(paper_id)
+        try:
+            path = deep_reading.asset_path(paper_id, file_name)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="报告图像不存在")
+        return FileResponse(path, media_type="image/png")
+
+    @application.get("/api/papers/{paper_id}/deep-report-package")
+    def paper_deep_report_package(paper_id: str):
+        record = require_paper(paper_id)
+        try:
+            path = deep_reading.build_package(record)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return FileResponse(
+            path,
+            media_type="application/zip",
+            filename=f"{record.title}_完整精读报告包.zip",
+        )
 
     @application.get("/api/papers/{paper_id}/technical-route.drawio")
     def paper_drawio(paper_id: str):
