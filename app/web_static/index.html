@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>产学研 Agent · 论文成果库</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="brand" type="button" data-action="home">
+      <span class="brand-mark">研</span>
+      <span><strong>产学研 Agent</strong><small>成果智能转化平台</small></span>
+    </button>
+    <nav aria-label="主导航">
+      <button class="nav-item muted" type="button" title="保留在原 Streamlit 入口，后续迁移">企业端</button>
+      <button class="nav-item active" type="button">院校端</button>
+      <button class="nav-item muted" type="button" title="后续迁移到新版网页">谱系版图</button>
+    </nav>
+    <span class="local-badge">本地数据 · 新版预览</span>
+  </header>
+
+  <main>
+    <section id="library-view" class="library-layout">
+      <aside class="filter-panel">
+        <div class="panel-heading">
+          <div><span class="eyebrow">论文来源库</span><h2>导师与成果</h2></div>
+          <span id="paper-total" class="count-pill">—</span>
+        </div>
+        <button id="all-teachers" class="teacher-item active" type="button">
+          <span>全部导师</span><b id="all-count">—</b>
+        </button>
+        <div id="teacher-list" class="teacher-list" aria-live="polite"></div>
+      </aside>
+
+      <section class="content-panel">
+        <div class="hero">
+          <div>
+            <span class="eyebrow">院校端 · 成果画像</span>
+            <h1>每篇论文，先成为一张可理解的技术卡片</h1>
+            <p>检索论文、进入单篇详情，再按需生成证据底稿、Kimi 精读、图版解读与技术路线。</p>
+          </div>
+          <div class="hero-stats" id="hero-stats"></div>
+        </div>
+
+        <div class="toolbar">
+          <label class="search-box">
+            <span aria-hidden="true">⌕</span>
+            <input id="search-input" type="search" placeholder="搜索导师、作者、题名、关键词或标签">
+          </label>
+          <label class="select-box">
+            <span>处理状态</span>
+            <select id="status-filter">
+              <option value="">全部状态</option>
+              <option value="metadata_pending">待解析正文</option>
+              <option value="parsed">待建立索引</option>
+              <option value="indexed">已索引</option>
+              <option value="failed">解析失败</option>
+              <option value="index_failed">索引失败</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="result-heading">
+          <div><h2 id="result-title">全部论文</h2><p id="result-meta">正在读取本地目录……</p></div>
+          <div class="legend"><span class="dot indexed"></span>已索引 <span class="dot pending"></span>处理中/待处理</div>
+        </div>
+        <div id="paper-grid" class="paper-grid" aria-live="polite"></div>
+        <div id="pagination" class="pagination"></div>
+      </section>
+    </section>
+
+    <section id="detail-view" class="detail-view hidden">
+      <button class="back-button" type="button" data-action="home">← 返回论文卡片库</button>
+      <div id="detail-shell"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>
+

@@ -2,6 +2,8 @@
 
 [中文](README.md) | [English](README_EN.md)
 
+> A product-oriented web UI is being developed in parallel. Double-click `启动新版网页Demo.cmd` to open the FastAPI paper-card library and full-page paper detail view. The existing `启动网页Demo.cmd` remains the stable Streamlit entry point.
+
 An evidence-grounded industry–academia transfer prototype. It parses papers locally, builds a vector database and traceable teacher research profiles, decomposes original enterprise requests into confirmable technical modules, and produces evidence-gated solution packages, technical routes, transfer assessments, and phased landing plans. The Streamlit interface provides an enterprise solution workbench, an academy paper-library and tag-review workbench, and paper Q&A with page-level citations.
 
 > Data notice: this public repository does not include real papers, teacher profiles, non-public enterprise requests, vector databases, or API keys. `examples/` contains fully synthetic installation fixtures plus a sourced public challenge summary explicitly labeled as not being a client engagement.
@@ -39,13 +41,14 @@ Requirements: 64-bit Windows 10/11 and an internet connection. The installer loo
 1. Download or clone the repository.
 2. Double-click `Setup-Windows.cmd` and wait for dependencies and the local BGE model to finish installing.
 3. For a first run, double-click `Install-Sample-Data.cmd`. If existing real data is detected, the script stops instead of mixing in the sample.
-4. Double-click `Start-Web-Demo.cmd`. The browser opens `http://127.0.0.1:8501` automatically.
+4. Double-click `Start-Product-Web.cmd` for the FastAPI product UI (`http://127.0.0.1:8000`). Use `Start-Web-Demo.cmd` when you need the complete stable Streamlit UI (`http://127.0.0.1:8501`).
 5. Close the launcher window or press `Ctrl+C` to stop the local service.
 
 Equivalent Chinese launcher names are included:
 
 - `安装环境.cmd`
 - `安装示例数据.cmd`
+- `启动新版网页Demo.cmd`
 - `启动网页Demo.cmd`
 
 On a CPU-only computer, run:
@@ -132,6 +135,9 @@ python src/retrieval/rag.py
 # Start Streamlit manually
 python -m streamlit run app/streamlit_app.py
 
+# Start the FastAPI product UI manually
+python -m uvicorn app.web_api:create_app --factory --host 127.0.0.1 --port 8000
+
 # Register a recursive paper library and create reviewable tags (local only)
 python scripts/sync_paper_library.py --papers-dir "D:\your-paper-library"
 
@@ -159,7 +165,7 @@ Always run a secret scan before publishing and confirm that you have permission 
 ## Project layout
 
 ```text
-app/                  Streamlit web interface
+app/                  FastAPI product UI and stable Streamlit interface
 examples/             Synthetic fixtures and traceable public challenge summaries
 scripts/              Windows setup, launch, and sample bootstrap logic
 src/ingestion/        PDF parsing and chunking
@@ -171,7 +177,7 @@ src/extraction/       Capability, teacher, and enterprise parsing
 src/matching/         Transparent weighted matching
 src/solutions/        Modules, evidence-gated solutions, routes, assessment, and draw.io export
 src/agents/           Eight-Agent coordination, evidence review, and reports
-tests/                Offline unit and Streamlit tests
+tests/                Offline unit, FastAPI, and Streamlit tests
 docs/                 Installation, acceptance, and release notes
 ```
 

@@ -2,6 +2,8 @@
 
 [中文](README.md) | [English](README_EN.md)
 
+> 新版产品网页正在并行建设：双击 `启动新版网页Demo.cmd` 打开 FastAPI 论文卡片与完整详情页；原有 `启动网页Demo.cmd` 继续保留为 Streamlit 稳定版。
+
 一个以论文证据为基础的产学研转化原型：在本地解析论文、建立向量数据库和教师科研画像，再将企业原始需求拆成可确认的技术模块，形成有论文页码证据的组合方案、技术路线、转化评估和分阶段落地计划。Streamlit 网页同时提供企业方案工作台、院校论文库与标签审核工作台，以及带页码引用的论文问答。
 
 > 数据说明：公开仓库不包含真实论文、教师画像、非公开企业需求、向量数据库或 API Key。`examples/` 包含完全合成的安装样例，以及带来源、明确标注为“非委托”的公开榜单需求摘要。
@@ -39,13 +41,14 @@
 1. 下载或克隆仓库。
 2. 双击 `安装环境.cmd`，等待依赖和本地 BGE 模型安装完成。
 3. 首次体验可双击 `安装示例数据.cmd`。如果电脑中已有真实数据，脚本会停止而不是混入示例数据。
-4. 双击 `启动网页Demo.cmd`，浏览器会自动打开 `http://127.0.0.1:8501`。
+4. 双击 `启动新版网页Demo.cmd` 打开 FastAPI 产品页（`http://127.0.0.1:8000`）；需要完整旧功能时双击 `启动网页Demo.cmd` 打开 Streamlit 稳定版（`http://127.0.0.1:8501`）。
 5. 不使用网页时关闭启动窗口，或在窗口中按 `Ctrl+C`。
 
 英文文件名提供相同功能：
 
 - `Setup-Windows.cmd`
 - `Install-Sample-Data.cmd`
+- `Start-Product-Web.cmd`
 - `Start-Web-Demo.cmd`
 
 CPU 电脑可以从终端运行：
@@ -132,6 +135,9 @@ python src/retrieval/rag.py
 # 手动启动网页
 python -m streamlit run app/streamlit_app.py
 
+# 手动启动新版 FastAPI 产品页
+python -m uvicorn app.web_api:create_app --factory --host 127.0.0.1 --port 8000
+
 # 递归登记大型论文库并生成待审核标签（纯本地）
 python scripts/sync_paper_library.py --papers-dir "D:\你的论文目录"
 
@@ -159,7 +165,7 @@ python scripts/index_paper_library.py --catalog data/metadata/papers.sqlite3 --l
 ## 项目结构
 
 ```text
-app/                  Streamlit 网页
+app/                  FastAPI 产品网页与 Streamlit 稳定版
 examples/             合成安装样例与可追溯的公开榜单需求摘要
 scripts/              Windows 安装、启动和示例初始化逻辑
 src/ingestion/        PDF 解析与 Chunk 切分
@@ -171,7 +177,7 @@ src/extraction/       科研能力、教师画像和企业需求解析
 src/matching/         透明加权匹配
 src/solutions/        技术模块、证据约束方案、路线、评估与 draw.io 导出
 src/agents/           八 Agent 协调、证据审查与报告
-tests/                离线单元测试和 Streamlit 测试
+tests/                离线单元测试、FastAPI 和 Streamlit 测试
 docs/                 安装、验收与版本说明
 ```
 
