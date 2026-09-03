@@ -435,7 +435,8 @@ Coordinator 需要支持暂停、人工确认、继续、失败重试和版本�
 ### 9.3 建议的代码边界
 
 ```text
-app/app.py                         多页面入口和共享资源
+app/streamlit_app.py               多页面入口与原生顶部导航
+app/app_pages/enterprise.py        企业端页面与共享资源
 app/app_pages/enterprise.py        企业端 UI
 app/app_pages/college.py           院校端 UI
 app/app_pages/lineage.py           谱系版图 UI

@@ -19,7 +19,7 @@ st.set_page_config(
 page = st.navigation(
     [
         st.Page(
-            APP_DIRECTORY / "app.py",
+            APP_DIRECTORY / "app_pages" / "enterprise.py",
             title="企业端 · 组合方案",
             icon=":material/factory:",
             default=True,
