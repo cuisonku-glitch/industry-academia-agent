@@ -137,6 +137,10 @@ python scripts/sync_paper_library.py --papers-dir "D:\你的论文目录"
 
 # 每次解析 10 篇正文（纯本地，可恢复）
 python scripts/parse_paper_library.py --catalog data/metadata/papers.sqlite3 --limit 10 --recover-interrupted
+
+# 用本机 GPU 增量切块并建立向量索引（纯本地，可恢复）
+$env:HF_HUB_OFFLINE="1"
+python scripts/index_paper_library.py --catalog data/metadata/papers.sqlite3 --limit 10 --recover-interrupted
 ```
 
 ## 数据与隐私边界
@@ -147,6 +151,7 @@ python scripts/parse_paper_library.py --catalog data/metadata/papers.sqlite3 --l
 - `data/raw/` 中的论文原文
 - `data/vector_db/` 与 Windows 用户目录中的本地 ChromaDB
 - 指标记录、能力记录、教师画像、企业需求、匹配结果和 Agent 运行记录
+- 解析后的论文正文与本地论文精读报告
 - 下载的本地模型缓存
 
 公开前仍应执行一次敏感信息扫描，并确保拥有论文和企业数据的处理权限。

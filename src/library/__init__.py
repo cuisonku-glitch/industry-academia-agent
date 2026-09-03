@@ -14,6 +14,20 @@ from .paper_ingestion import (
     PaperIngestionService,
     ParseBatchResult,
 )
+from .paper_indexing import (
+    IndexBatchResult,
+    PaperIndexingService,
+    build_library_chunks,
+    load_parsed_paper,
+)
+from .paper_analysis import (
+    DEFAULT_PAPER_REPORT_DIRECTORY,
+    LOCAL_READING_VERSION,
+    PaperAnalysisService,
+    PaperReadingResult,
+    render_reading_markdown,
+    select_reading_evidence,
+)
 
 __all__ = [
     "DEFAULT_LIBRARY_ROOT",
@@ -26,4 +40,14 @@ __all__ = [
     "LIBRARY_PARSE_PIPELINE_VERSION",
     "PaperIngestionService",
     "ParseBatchResult",
+    "IndexBatchResult",
+    "PaperIndexingService",
+    "build_library_chunks",
+    "load_parsed_paper",
+    "DEFAULT_PAPER_REPORT_DIRECTORY",
+    "LOCAL_READING_VERSION",
+    "PaperAnalysisService",
+    "PaperReadingResult",
+    "render_reading_markdown",
+    "select_reading_evidence",
 ]

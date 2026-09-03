@@ -33,6 +33,7 @@ data/processed/enterprise_needs/
 data/processed/matches/
 data/processed/agent_runs/
 data/processed/papers/
+data/processed/paper_reports/
 
 # Downloaded local AI models
 .cache/

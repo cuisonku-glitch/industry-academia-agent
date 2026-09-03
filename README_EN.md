@@ -137,6 +137,10 @@ python scripts/sync_paper_library.py --papers-dir "D:\your-paper-library"
 
 # Parse 10 full-text papers per recoverable local batch
 python scripts/parse_paper_library.py --catalog data/metadata/papers.sqlite3 --limit 10 --recover-interrupted
+
+# Incrementally chunk and index with the local GPU (local and recoverable)
+$env:HF_HUB_OFFLINE="1"
+python scripts/index_paper_library.py --catalog data/metadata/papers.sqlite3 --limit 10 --recover-interrupted
 ```
 
 ## Data and privacy boundary
@@ -147,6 +151,7 @@ The following paths are excluded by `.gitignore` and are not uploaded by normal 
 - Raw papers under `data/raw/`
 - ChromaDB data under `data/vector_db/` and the Windows user profile
 - Metric records, capability records, teacher profiles, enterprise requests, match results, and Agent run records
+- Parsed paper text and local paper-reading reports
 - Downloaded local model caches
 
 Always run a secret scan before publishing and confirm that you have permission to process the papers and enterprise data.

@@ -164,6 +164,29 @@ class StreamlitAppTests(unittest.TestCase):
         )
         self.assertIn("1", [item.value for item in app.metric])
 
+    def test_indexed_paper_enables_local_reading_only(self) -> None:
+        paper = Path(self.academy_directory.name) / "indexed.pdf"
+        paper.write_bytes(b"%PDF-1.4 indexed catalog fixture")
+        record = PaperCatalog(
+            Path(os.environ["INDUSTRY_AGENT_CATALOG_PATH"])
+        ).register_pdf(
+            paper,
+            title="已索引论文",
+            teacher="导师甲",
+            ingestion_status="indexed",
+        )
+        app = self._academy_app()
+        app.session_state["academy_selected_paper_id"] = record.paper_id
+        app.run()
+
+        self.assertEqual(len(app.exception), 0)
+        reading = self._button(app, "论文精读总结")
+        route = self._button(app, "技术路线提取")
+        conversion = self._button(app, "产业转化分析")
+        self.assertFalse(reading.disabled)
+        self.assertTrue(route.disabled)
+        self.assertTrue(conversion.disabled)
+
     def test_native_router_opens_default_enterprise_page(self) -> None:
         app = AppTest.from_file(str(ROUTER_PATH), default_timeout=20).run()
         self.assertEqual(len(app.exception), 0)
