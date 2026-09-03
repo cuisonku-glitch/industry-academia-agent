@@ -11,7 +11,10 @@ import streamlit as st
 
 from src.library import (
     DEFAULT_LIBRARY_ROOT,
+    DEFAULT_PARSED_PAPER_DIRECTORY,
+    PaperAnalysisService,
     PaperIngestionService,
+    PaperIndexingService,
     PaperLibraryService,
 )
 from src.repository import (
@@ -44,8 +47,10 @@ STATUS_LABELS = {
     "metadata_pending": "已登记，待解析正文",
     "parsing": "正在解析正文",
     "parsed": "正文已解析，待建立索引",
+    "indexing": "正在建立索引",
     "indexed": "已索引",
     "failed": "解析失败，可重试",
+    "index_failed": "索引失败，可重试",
 }
 REVIEW_LABELS = {
     "suggested": "待确认",
@@ -70,6 +75,11 @@ def get_ingestion_service(database_path: str) -> PaperIngestionService:
         get_paper_catalog(database_path),
         library_service=get_library_service(database_path),
     )
+
+
+@st.cache_resource
+def get_analysis_service(database_path: str) -> PaperAnalysisService:
+    return PaperAnalysisService(get_paper_catalog(database_path))
 
 
 def _catalog_path() -> str:
@@ -247,6 +257,71 @@ def _render_parse_panel(service: PaperIngestionService) -> None:
             st.rerun()
 
 
+def _render_index_panel(catalog: PaperCatalog) -> None:
+    with st.popover("建立索引", icon=":material/database:", width="stretch"):
+        st.caption("使用本机 BGE + GPU 增量建库；已完成论文不会重复处理。")
+        batch_size = st.number_input(
+            "本批索引数量",
+            min_value=1,
+            max_value=20,
+            value=5,
+            step=1,
+            key="academy_index_batch_size",
+        )
+        retry_failed = st.toggle("同时重试索引失败论文", key="academy_retry_index")
+        if st.button("开始建立本批索引", type="primary", width="stretch"):
+            from src.retrieval.embedder import LocalEmbedder
+            from src.retrieval.vector_store import PaperVectorStore
+
+            progress_bar = st.progress(0, text="正在加载本地 Embedding 模型……")
+            try:
+                embedder = LocalEmbedder()
+                with PaperVectorStore() as store:
+                    service = PaperIndexingService(
+                        catalog,
+                        embedder=embedder,
+                        vector_store=store,
+                        parsed_directory=DEFAULT_PARSED_PAPER_DIRECTORY,
+                    )
+                    recovered = service.recover_interrupted()
+
+                    def update_progress(
+                        current: int,
+                        total: int,
+                        title: str,
+                        chunks: int,
+                    ) -> None:
+                        detail = f" · 本篇 {chunks} Chunk" if chunks else ""
+                        progress_bar.progress(
+                            current / total if total else 1.0,
+                            text=f"{current}/{total} · {title}{detail}",
+                        )
+
+                    result = service.index_batch(
+                        limit=int(batch_size),
+                        retry_failed=retry_failed,
+                        progress=update_progress,
+                    )
+                progress_bar.empty()
+                if result.failed:
+                    st.warning(
+                        f"完成 {result.completed}，失败 {result.failed}；可修复后重试。"
+                    )
+                    for error in result.errors[:5]:
+                        st.caption(error)
+                else:
+                    st.success(
+                        f"索引完成 {result.completed} 篇，共写入 "
+                        f"{result.chunks_indexed} 个 Chunk。"
+                    )
+                if recovered:
+                    st.caption(f"本次先恢复了 {recovered} 个中断索引任务。")
+                st.rerun()
+            except Exception as exc:
+                progress_bar.empty()
+                st.error(f"索引失败，可修复后重试：{exc}")
+
+
 def _render_metadata_editor(catalog: PaperCatalog, record: PaperRecord) -> None:
     with st.expander("基础信息与授权", expanded=False):
         token = record.updated_at
@@ -363,20 +438,68 @@ def _render_tag_editor(catalog: PaperCatalog, record: PaperRecord) -> list[Paper
     return tags
 
 
-def _render_analysis_actions(record: PaperRecord) -> None:
+def _render_analysis_actions(
+    service: PaperAnalysisService,
+    record: PaperRecord,
+) -> None:
     st.markdown("#### 论文分析任务")
-    ready = record.ingestion_status in {"parsed", "indexed"}
+    ready = record.ingestion_status in {
+        "parsed",
+        "indexing",
+        "indexed",
+        "index_failed",
+    }
+    reading_result = None
     with st.container(horizontal=True):
-        st.button("论文精读总结", disabled=not ready)
-        st.button("技术路线提取", disabled=not ready)
-        st.button("产业转化分析", disabled=not ready)
+        run_reading = st.button(
+            "论文精读总结",
+            icon=":material/menu_book:",
+            disabled=not ready,
+        )
+        st.button(
+            "技术路线提取",
+            icon=":material/route:",
+            disabled=True,
+            help="下一纵切接入 draw.io 和证据节点。",
+        )
+        st.button(
+            "产业转化分析",
+            icon=":material/handshake:",
+            disabled=True,
+            help="将在技术路线完成后接入。",
+        )
     if not ready:
         st.info(
             "这篇论文目前只完成目录登记。先完成文本解析/索引，随后才会启用精读、"
             "路线和转化分析；系统不会仅凭文件名编造结论。"
         )
     else:
-        st.caption("任务输出将在后续纵切中接入证据页码、人工审核和报告版本。")
+        st.caption("精读总结完全在本地生成，每条摘录保留页码与 Chunk；不会调用 Kimi。")
+        if run_reading:
+            try:
+                with st.spinner("正在从已解析正文中定位摘要、方法、结果和结论……"):
+                    reading_result = service.generate_local_reading(record)
+                st.success(
+                    f"本地精读完成：{reading_result.evidence_count} 条可定位证据，"
+                    f"覆盖 {len(reading_result.covered_sections)}/5 个栏目。"
+                )
+            except Exception as exc:
+                st.error(f"精读生成失败：{exc}")
+        report = (
+            reading_result.report
+            if reading_result is not None
+            else service.load_report(record.paper_id)
+        )
+        if report:
+            with st.expander("查看本地证据型精读", expanded=reading_result is not None):
+                st.markdown(report)
+            st.download_button(
+                "下载 Markdown 精读报告",
+                data=report,
+                file_name=f"paper_{record.paper_id[:12]}_reading.md",
+                mime="text/markdown",
+                icon=":material/download:",
+            )
 
 
 def _render_pdf_preview(record: PaperRecord, *, height: int = 680) -> None:
@@ -405,15 +528,27 @@ def _render_full_preview(catalog: PaperCatalog, record: PaperRecord) -> None:
         f"导师：{record.teacher or '待识别'} · "
         f"状态：{STATUS_LABELS.get(record.ingestion_status, record.ingestion_status)}"
     )
+    reading_report = PaperAnalysisService(catalog).load_report(record.paper_id)
+    preview_options = (["精读报告"] if reading_report else []) + ["目录报告", "PDF 原文"]
     mode = st.segmented_control(
         "全页预览内容",
-        ["目录报告", "PDF 原文"],
-        default=st.session_state.get("academy_preview_mode", "目录报告"),
+        preview_options,
+        default=("精读报告" if reading_report else "目录报告"),
         required=True,
         key="academy_full_preview_mode",
     )
     if mode == "PDF 原文":
         _render_pdf_preview(record, height=1050)
+    elif mode == "精读报告" and reading_report:
+        with st.container(border=True):
+            st.markdown(reading_report)
+        st.download_button(
+            "下载 Markdown 精读报告",
+            data=reading_report,
+            file_name=f"paper_{record.paper_id[:12]}_reading.md",
+            mime="text/markdown",
+            icon=":material/download:",
+        )
     else:
         report = _report_markdown(record, catalog.list_tags(record.paper_id))
         with st.container(border=True):
@@ -514,6 +649,7 @@ def render_academy_page() -> None:
     try:
         catalog = get_paper_catalog(database_path)
         service = get_library_service(database_path)
+        analysis_service = get_analysis_service(database_path)
     except Exception as exc:
         st.error(f"论文目录数据库无法打开：{exc}")
         st.stop()
@@ -540,6 +676,7 @@ def render_academy_page() -> None:
             _render_sync_panel(service, library_root)
             _render_upload_panel(service)
             _render_parse_panel(get_ingestion_service(database_path))
+            _render_index_panel(catalog)
         query = st.text_input(
             "搜索导师、作者、题名或标签",
             placeholder="支持模糊搜索",
@@ -569,7 +706,7 @@ def render_academy_page() -> None:
             )
             _render_metadata_editor(catalog, selected)
             tags = _render_tag_editor(catalog, selected)
-            _render_analysis_actions(selected)
+            _render_analysis_actions(analysis_service, selected)
 
     with right:
         st.subheader("报告与原文预览")
@@ -577,6 +714,7 @@ def render_academy_page() -> None:
             st.info("选择论文后在这里预览标签报告和 PDF 原文。")
         else:
             tags = catalog.list_tags(selected.paper_id)
+            reading_report = analysis_service.load_report(selected.paper_id)
             if st.button(
                 "打开全页预览",
                 icon=":material/open_in_full:",
@@ -584,10 +722,14 @@ def render_academy_page() -> None:
             ):
                 st.session_state["academy_fullscreen_preview"] = True
                 st.rerun()
+            preview_options = (["精读报告"] if reading_report else []) + [
+                "目录报告",
+                "PDF 原文",
+            ]
             preview_mode = st.segmented_control(
                 "预览内容",
-                ["目录报告", "PDF 原文"],
-                default="目录报告",
+                preview_options,
+                default="精读报告" if reading_report else "目录报告",
                 required=True,
                 label_visibility="collapsed",
                 width="stretch",
@@ -595,6 +737,16 @@ def render_academy_page() -> None:
             )
             if preview_mode == "PDF 原文":
                 _render_pdf_preview(selected)
+            elif preview_mode == "精读报告" and reading_report:
+                with st.container(border=True, height=620):
+                    st.markdown(reading_report)
+                st.download_button(
+                    "下载 Markdown 精读报告",
+                    data=reading_report,
+                    file_name=f"paper_{selected.paper_id[:12]}_reading.md",
+                    mime="text/markdown",
+                    width="stretch",
+                )
             else:
                 report = _report_markdown(selected, tags)
                 with st.container(border=True, height=620):

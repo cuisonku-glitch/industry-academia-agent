@@ -3,13 +3,19 @@
 from __future__ import annotations
 
 import io
+import gzip
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 import pymupdf
 
-from src.library import PaperIngestionService, PaperLibraryService
+from src.library import (
+    PaperIndexingService,
+    PaperIngestionService,
+    PaperLibraryService,
+)
 from src.repository import PaperCatalog, PaperTag
 
 
@@ -19,6 +25,23 @@ def make_pdf(path: Path, text: str = "test") -> None:
     page.insert_text((72, 72), text)
     document.save(path)
     document.close()
+
+
+class FakeEmbedder:
+    def embed_documents(self, texts):
+        return [[float(len(text)), 1.0] for text in texts]
+
+
+class FakeVectorStore:
+    def __init__(self) -> None:
+        self.records = {}
+
+    def count(self) -> int:
+        return len(self.records)
+
+    def upsert_chunks(self, chunks, embeddings) -> None:
+        for chunk, embedding in zip(chunks, embeddings):
+            self.records[chunk["chunk_id"]] = (chunk, embedding)
 
 
 class PaperLibraryServiceTests(unittest.TestCase):
@@ -157,6 +180,75 @@ class PaperLibraryServiceTests(unittest.TestCase):
             updated = catalog.get(record.paper_id)
             self.assertEqual(updated.ingestion_status, "failed")
             self.assertTrue(updated.error_message)
+
+    def test_incremental_indexer_uses_stable_ids_and_marks_paper_indexed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            paper = root / "paper.pdf"
+            make_pdf(paper, "indexed evidence")
+            catalog = PaperCatalog(root / "catalog.sqlite3")
+            record = catalog.register_pdf(
+                paper,
+                title="索引测试论文",
+                teacher="导师甲",
+                ingestion_status="parsed",
+            )
+            parsed_directory = root / "parsed"
+            parsed_directory.mkdir()
+            parsed = {
+                "paper_id": record.paper_id,
+                "file_name": record.file_name,
+                "total_pages": 1,
+                "parser_version": "layout_v2",
+                "toc": [],
+                "pages": [{"page": 1, "text": "可定位的论文正文证据。", "blocks": []}],
+            }
+            with gzip.open(
+                parsed_directory / f"{record.paper_id}.json.gz",
+                mode="wt",
+                encoding="utf-8",
+            ) as destination:
+                json.dump(parsed, destination, ensure_ascii=False)
+            store = FakeVectorStore()
+            service = PaperIndexingService(
+                catalog,
+                embedder=FakeEmbedder(),
+                vector_store=store,
+                parsed_directory=parsed_directory,
+            )
+
+            result = service.index_batch(limit=1)
+
+            self.assertEqual(result.completed, 1)
+            self.assertEqual(result.failed, 0)
+            self.assertGreater(result.chunks_indexed, 0)
+            self.assertTrue(
+                all(key.startswith(record.paper_id) for key in store.records)
+            )
+            updated = catalog.get(record.paper_id)
+            self.assertEqual(updated.ingestion_status, "indexed")
+            self.assertEqual(updated.pipeline_version, "section_v2")
+
+    def test_incremental_indexer_records_missing_parsed_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            paper = root / "paper.pdf"
+            make_pdf(paper)
+            catalog = PaperCatalog(root / "catalog.sqlite3")
+            record = catalog.register_pdf(paper, ingestion_status="parsed")
+            service = PaperIndexingService(
+                catalog,
+                embedder=FakeEmbedder(),
+                vector_store=FakeVectorStore(),
+                parsed_directory=root / "missing",
+            )
+
+            result = service.index_batch(limit=1)
+
+            self.assertEqual(result.failed, 1)
+            updated = catalog.get(record.paper_id)
+            self.assertEqual(updated.ingestion_status, "index_failed")
+            self.assertIn("解析结果不存在", updated.error_message)
 
 
 if __name__ == "__main__":

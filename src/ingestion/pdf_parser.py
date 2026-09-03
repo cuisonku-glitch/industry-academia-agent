@@ -304,14 +304,33 @@ def parse_pdf(pdf_path: Path) -> dict:
         raise ValueError(f"Expected a PDF file: {pdf_path}")
 
     pages = []
+    previous_error_display = pymupdf.TOOLS.mupdf_display_errors()
+    previous_warning_display = pymupdf.TOOLS.mupdf_display_warnings()
+    pymupdf.TOOLS.reset_mupdf_warnings()
+    pymupdf.TOOLS.mupdf_display_errors(False)
+    pymupdf.TOOLS.mupdf_display_warnings(False)
+    try:
+        with pymupdf.open(pdf_path) as document:
+            if document.needs_pass:
+                raise ValueError(f"PDF is password-protected: {pdf_path.name}")
 
-    with pymupdf.open(pdf_path) as document:
-        if document.needs_pass:
-            raise ValueError(f"PDF is password-protected: {pdf_path.name}")
+            toc = _extract_toc(document)
+            for page_number, page in enumerate(document, start=1):
+                pages.append(extract_page_layout(page, page_number))
+    finally:
+        raw_diagnostics = pymupdf.TOOLS.mupdf_warnings(reset=1)
+        pymupdf.TOOLS.mupdf_display_errors(previous_error_display)
+        pymupdf.TOOLS.mupdf_display_warnings(previous_warning_display)
 
-        toc = _extract_toc(document)
-        for page_number, page in enumerate(document, start=1):
-            pages.append(extract_page_layout(page, page_number))
+    diagnostic_counts = Counter(
+        line.strip()
+        for line in str(raw_diagnostics).splitlines()
+        if line.strip()
+    )
+    diagnostics = [
+        {"message": message, "count": count}
+        for message, count in diagnostic_counts.most_common(25)
+    ]
 
     removed_margin_blocks = _remove_recurring_margin_blocks(pages)
 
@@ -324,6 +343,8 @@ def parse_pdf(pdf_path: Path) -> dict:
         "parser_version": PARSER_VERSION,
         "script_span_count": sum(page["script_span_count"] for page in pages),
         "removed_margin_blocks": removed_margin_blocks,
+        "parser_diagnostic_count": sum(diagnostic_counts.values()),
+        "parser_diagnostics": diagnostics,
     }
 
 

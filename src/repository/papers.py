@@ -23,7 +23,16 @@ WINDOWS_CATALOG_ALIAS = (
 DEFAULT_METADATA_SEED_PATH = PROJECT_ROOT / "config" / "paper_metadata.seed.json"
 CATALOG_SCHEMA_VERSION = 2
 INGESTION_STATUSES = frozenset(
-    {"discovered", "metadata_pending", "parsing", "parsed", "indexed", "failed"}
+    {
+        "discovered",
+        "metadata_pending",
+        "parsing",
+        "parsed",
+        "indexing",
+        "indexed",
+        "failed",
+        "index_failed",
+    }
 )
 SOURCE_TYPES = frozenset({"local", "upload", "sample"})
 TAG_CATEGORIES = frozenset(
